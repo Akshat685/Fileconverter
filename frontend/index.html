@@ -8,9 +8,14 @@
     <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- ✅ Google API (gapi + picker) -->
-<script src="https://apis.google.com/js/api.js?onload=onApiLoad"></script>
-
+    <!-- ✅ Google API (gapi + picker) -->
+    <script>
+      window.onApiLoad = function () {
+        // This will be overridden by React in useEffect
+        console.log("Google API loaded - placeholder");
+      };
+    </script>
+    <script src="https://apis.google.com/js/api.js?onload=onApiLoad"></script>
     <!-- ✅ Dropbox Chooser Script -->
     <script
       type="text/javascript"
