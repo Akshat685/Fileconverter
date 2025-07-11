@@ -6,7 +6,7 @@ import {
   Archive,
   Book,
   Image,
-  Settings,
+  
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom'; // ✅ import navigate
 

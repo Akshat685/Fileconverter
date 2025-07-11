@@ -19,10 +19,9 @@ interface FileItem {
 }
 
 export default function Dropbox() {
-  const DROPBOX_APP_KEY = "2434iawyecdjpxc";
-  const GOOGLE_CLIENT_ID =
-    "866725812936-fvjl5btdg8d8s8mc03aihrvs3tmj3q6h.apps.googleusercontent.com";
-  const GOOGLE_API_KEY = "AIzaSyDtxORXGl-d3mMhG4TKBGS90scPCX7JGyM";
+  // const DROPBOX_APP_KEY = import.meta.env.VITE_DROPBOX_APP_KEY!;
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID!;
+  const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY!;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerLoaded = useRef(false);

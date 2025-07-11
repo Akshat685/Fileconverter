@@ -1,4 +1,3 @@
-import React from "react";
 import { FaCog, FaStar } from "react-icons/fa";
 
 const Features = () => {
