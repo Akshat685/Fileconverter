@@ -87,42 +87,42 @@ export default function Dropbox() {
     });
   };
   const handleConvert = async () => {
-  if (selectedFiles.length === 0) {
-    alert("No files selected for conversion.");
-    return;
-  }
+    if (selectedFiles.length === 0) {
+      // alert("No files selected for conversion.");
+      return;
+    }
 
-  const formData = new FormData();
+    const formData = new FormData();
 
-  selectedFiles.forEach((item, i) => {
-    formData.append("files", item.file);
-    formData.append("formats[]", JSON.stringify({
-      name: item.file.name,
-      target: item.selectedFormat,
-      type: item.section,
-    }));
-  });
-
-  try {
-    const res = await fetch("http://localhost:5000/api/convert", {
-      method: "POST",
-      body: formData,
+    selectedFiles.forEach((item, i) => {
+      formData.append("files", item.file);
+      formData.append("formats[]", JSON.stringify({
+        name: item.file.name,
+        target: item.selectedFormat,
+        type: item.section,
+      }));
     });
 
-    if (!res.ok) throw new Error("Conversion failed");
+    try {
+      const res = await fetch("http://localhost:5000/api/convert", {
+        method: "POST",
+        body: formData,
+      });
 
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "converted_files.zip";
-    a.click();
-    window.URL.revokeObjectURL(url);
-  } catch (err) {
-    alert("Conversion failed. Try again.");
-    console.error(err);
-  }
-};
+      if (!res.ok) throw new Error("Conversion failed");
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "converted_files.zip";
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Conversion failed. Try again.");
+      console.error(err);
+    }
+  };
 
   const handleGoogleDriveUpload = () => {
     if (!pickerLoaded.current) return alert("Google Picker not loaded.");
@@ -161,7 +161,7 @@ export default function Dropbox() {
   const formatOptions = {
     image: ["BMP", "EPS", "GIF", "ICO", "PNG", "SVG", "TGA", "TIFF", "WBMP", "WEBP"],
     compressor: ["JPG IMAGE COMPRESS", "PNG IMAGE COMPRESS", "SVG IMAGE COMPRESS"],
-    pdfs: ["Image to PDF", ],
+    pdfs: ["Image to PDF",],
   };
 
   const toggleMenu = (index: number) => {
@@ -305,12 +305,12 @@ export default function Dropbox() {
         </h1>
 
         <button
-  onClick={handleConvert}
-  className="flex items-center gap-2 bg-red-400 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-red-500 transition"
->
-  <FiArrowRight className="text-[16px]" />
-  Convert files
-</button>
+          onClick={handleConvert}
+          className="flex items-center gap-2 bg-red-400 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-red-500 transition"
+        >
+          <FiArrowRight className="text-[16px]" />
+          Convert files
+        </button>
       </div>
     </div>
   );

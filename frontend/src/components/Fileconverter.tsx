@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import {
   ChevronDown,
   Music,
-  FileText,
   Video,
   Archive,
   Book,
   Image,
   Settings,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // ✅ import navigate
 
 const FileConverters = () => {
   const [openSections, setOpenSections] = useState<string[]>([]);
+  const navigate = useNavigate(); // ✅ for navigation
 
   interface ConverterOption {
     icon: React.ReactNode;
@@ -141,14 +142,16 @@ const FileConverters = () => {
                         className="text-white px-5 py-3 rounded-lg cursor-pointer transition-colors duration-200 flex items-center justify-center"
                         style={{ backgroundColor: '#dc3545' }}
                         onMouseEnter={(e) =>
-                        ((e.target as HTMLElement).style.backgroundColor =
-                          '#c02a37')
+                          ((e.target as HTMLElement).style.backgroundColor = '#c02a37')
                         }
                         onMouseLeave={(e) =>
-                        ((e.target as HTMLElement).style.backgroundColor =
-                          '#dc3545')
+                          ((e.target as HTMLElement).style.backgroundColor = '#dc3545')
                         }
-                      >
+                        onClick={() =>
+                          navigate(`/converter/${encodeURIComponent(option.title.toLowerCase().replace(/\s+/g, "-"))}`, {
+                            state: { fromFileConverter: true },
+                          })
+                        }                      >
                         <span className="mr-3">{option.icon}</span>
                         <span className="font-medium">{option.title}</span>
                       </div>
