@@ -18,7 +18,7 @@ const port = process.env.PORT || 5000;
 app.use(cors({
   origin: [
     'http://localhost:5173',           
-    'https://your-frontend.vercel.app'  
+    'https://fileconverter-2e4l.vercel.app/'  
   ],
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
