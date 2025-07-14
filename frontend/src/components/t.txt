@@ -1,0 +1,1307 @@
+i have frontend folder in that i have src folder in that i have components folder in that i have Dropbox.tsx file 
+ import React, { useEffect, useRef, useState } from "react";
+import { FaFolderOpen, FaDropbox, FaGoogleDrive } from "react-icons/fa";
+import { FiArrowRight, FiDownload } from "react-icons/fi";
+
+declare global {
+  interface Window {
+    Dropbox: any;
+    gapi: any;
+    google: any;
+    onApiLoad: () => void;
+  }
+}
+
+interface FileItem {
+  file: File;
+  showMenu: boolean;
+  section: string;
+  selectedFormat: string;
+}
+
+export default function Dropbox() {
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID!;
+  const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY!;
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pickerLoaded = useRef(false);
+  const [selectedFiles, setSelectedFiles] = useState<FileItem[]>([]);
+  const [isConverting, setIsConverting] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState<string>("converted_files.zip");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.onApiLoad = () => {
+      window.gapi.load("client:auth2", async () => {
+        await window.gapi.client.init({
+          apiKey: GOOGLE_API_KEY,
+          clientId: GOOGLE_CLIENT_ID,
+          scope: "https://www.googleapis.com/auth/drive.readonly",
+          discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+        });
+
+        window.gapi.load("picker", {
+          callback: () => {
+            if (google?.picker) {
+              window.google = window.google || {};
+              window.google.picker = google.picker;
+              pickerLoaded.current = true;
+            }
+          },
+        });
+      });
+    };
+
+    return () => {
+      if (downloadUrl) {
+        window.URL.revokeObjectURL(downloadUrl);
+      }
+    };
+  }, [downloadUrl]);
+
+  const handleLocalFileClick = () => fileInputRef.current?.click();
+
+  const handleLocalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const newFiles = Array.from(files).map((f) => ({
+        file: f,
+        showMenu: false,
+        section: "image",
+        selectedFormat: "",
+      }));
+      setSelectedFiles((prev) => [...prev, ...newFiles]);
+      setDownloadUrl(null);
+      setErrorMessage(null);
+    }
+  };
+
+  const handleDropboxUpload = () => {
+    if (!window.Dropbox) return alert("Dropbox SDK not loaded.");
+    window.Dropbox.choose({
+      linkType: "direct",
+      multiselect: true,
+      extensions: [
+        ".mp3", ".wav", ".aac", ".flac", ".ogg", ".opus", ".wma",
+        ".mp4", ".avi", ".mov", ".webm", ".mkv", ".flv", ".wmv",
+        ".png", ".jpg", ".jpeg", ".webp", ".svg", ".bmp", ".gif", ".ico", ".tga", ".tiff", ".wbmp",
+        ".pdf", ".docx", ".txt", ".rtf", ".odt",
+        ".zip", ".7z",
+        ".epub", ".mobi", ".azw3",
+      ],
+      success: (files: any[]) => {
+        const mockFiles = files.map((f) => ({
+          file: new File([""], f.name),
+          showMenu: false,
+          section: "image",
+          selectedFormat: "",
+        }));
+        setSelectedFiles((prev) => [...prev, ...mockFiles]);
+        setDownloadUrl(null);
+        setErrorMessage(null);
+      },
+    });
+  };
+
+ const handleConvert = async () => {
+  if (selectedFiles.length === 0) {
+    setErrorMessage("No files selected for conversion.");
+    return;
+  }
+  if (selectedFiles.some((item) => !item.selectedFormat)) {
+    setErrorMessage("Please select a format for all files.");
+    return;
+  }
+
+  setIsConverting(true);
+  setDownloadUrl(null);
+  setErrorMessage(null);
+
+  const formData = new FormData();
+  
+  // Create the formats array first
+  const formats = selectedFiles.map(item => ({
+    name: item.file.name,
+    target: item.selectedFormat,
+    type: item.section,
+  }));
+
+  // Append files
+  selectedFiles.forEach((item) => {
+    formData.append("files", item.file);
+  });
+
+  // Append the entire formats array as a single JSON string
+  formData.append("formats", JSON.stringify(formats));
+
+  try {
+    const res = await fetch(`${API_URL}/api/convert`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || "Conversion failed");
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    setDownloadUrl(url);
+    setDownloadFileName("converted_files.zip");
+  } catch (err) {
+    setErrorMessage(err.message || "Failed to connect to the server. Please ensure the backend is running at " + API_URL);
+    console.error(err);
+  } finally {
+    setIsConverting(false);
+  }
+};
+
+  const handleGoogleDriveUpload = () => {
+    if (!pickerLoaded.current) return alert("Google Picker not loaded.");
+    const auth2 = window.gapi.auth2.getAuthInstance();
+    auth2
+      .signIn()
+      .then((googleUser: any) => {
+        const token = googleUser.getAuthResponse().access_token;
+        createGooglePicker(token);
+      })
+      .catch(() => alert("Google Sign-in failed."));
+  };
+
+  const createGooglePicker = (token: string) => {
+    if (pickerLoaded && token && window.google?.picker) {
+      const picker = new window.google.picker.PickerBuilder()
+        .addView(window.google.picker.ViewId.DOCS)
+        .setOAuthToken(token)
+        .setDeveloperKey(GOOGLE_API_KEY)
+        .setCallback((data: any) => {
+          if (data.action === window.google.picker.Action.PICKED) {
+            const mockFiles = data.docs.map((doc: any) => ({
+              file: new File([""], doc.name),
+              showMenu: false,
+              section: "image",
+              selectedFormat: "",
+            }));
+            setSelectedFiles((prev) => [...prev, ...mockFiles]);
+            setDownloadUrl(null);
+            setErrorMessage(null);
+          }
+        })
+        .build();
+      picker.setVisible(true);
+    }
+  };
+
+  const formatOptions = {
+    image: ["BMP", "EPS", "GIF", "ICO", "PNG", "SVG", "TGA", "TIFF", "WBMP", "WEBP", "JPG", "JPEG"],
+    compressor: ["JPG", "PNG", "SVG"],
+    pdfs: ["DOCX"],
+    audio: ["MP3", "WAV", "AAC", "FLAC", "OGG", "OPUS", "WMA"],
+    video: ["MP4", "AVI", "MOV", "WEBM", "MKV", "FLV", "WMV"],
+    document: ["DOCX", "PDF", "TXT", "RTF", "ODT"],
+    archive: ["ZIP", "7Z"],
+    ebook: ["EPUB", "MOBI", "PDF", "AZW3"],
+  };
+
+  const toggleMenu = (index: number) => {
+    setSelectedFiles((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, showMenu: !item.showMenu } : { ...item, showMenu: false }
+      )
+    );
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const setSection = (index: number, section: string) => {
+    const updated = [...selectedFiles];
+    updated[index].section = section;
+    updated[index].selectedFormat = "";
+    setSelectedFiles(updated);
+  };
+
+  const selectFormat = (index: number, format: string) => {
+    const updated = [...selectedFiles];
+    updated[index].selectedFormat = format;
+    updated[index].showMenu = false;
+    setSelectedFiles(updated);
+  };
+
+  const handleDownload = () => {
+    if (downloadUrl) {
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = downloadFileName;
+      a.click();
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-center">
+        <div className="flex flex-col items-center justify-center space-y-2 converter-wrapper tall p-12 m-4 rounded-md">
+          <div className="bg-red-500 text-white relative gap-4 rounded-md px-8 py-6 flex items-center space-x-6 shadow-md w-[50%] justify-center">
+            <span className="font-semibold text-[15px]">Choose Files</span>
+            <FaFolderOpen
+              onClick={handleLocalFileClick}
+              title="Upload from device"
+              className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleLocalFileChange}
+              style={{ display: "none" }}
+              accept=".mp3,.wav,.aac,.flac,.ogg,.opus,.wma,.mp4,.avi,.mov,.webm,.mkv,.flv,.wmv,.png,.jpg,.jpeg,.webp,.svg,.bmp,.gif,.ico,.tga,.tiff,.wbmp,.pdf,.docx,.txt,.rtf,.odt,.zip,.7z,.epub,.mobi,.azw3"
+            />
+            <FaDropbox
+              onClick={handleDropboxUpload}
+              title="Upload from Dropbox"
+              className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
+            />
+            <FaGoogleDrive
+              onClick={handleGoogleDriveUpload}
+              title="Upload from Google Drive"
+              className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
+            />
+          </div>
+          <div className="dropboxfoot mt-5 text-sm text-gray-400">
+            100 MB maximum file size and up to 5 files.
+          </div>
+          {errorMessage && (
+            <div className="mt-4 text-red-500 text-sm font-medium">
+              {errorMessage}
+            </div>
+          )}
+          <div className="mt-6 w-full max-w-2xl space-y-3">
+            {selectedFiles.map((item, index) => (
+              <div
+                key={index}
+                className="relative bg-white text-gray-700 rounded-md px-4 py-3 shadow-md border"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <span className="text-xl">📄</span>
+                    <p className="truncate max-w-[160px] text-sm font-medium">
+                      {item.file.name}
+                    </p>
+                    <span className="text-sm text-gray-400">to</span>
+                    <button
+                      className="bg-gray-200 hover:bg-gray-300 text-sm rounded-md px-2 py-1"
+                      onClick={() => toggleMenu(index)}
+                    >
+                      {item.selectedFormat || "Select format"}
+                    </button>
+                  </div>
+                  <button
+                    className="text-gray-400 hover:text-red-500 transition text-xl"
+                    onClick={() => removeFile(index)}
+                  >
+                    ×
+                  </button>
+                </div>
+                {item.showMenu && (
+                  <div className="absolute top-full mt-2 right-12 bg-[#1f1f1f] text-white rounded-md p-4 w-[340px] shadow-xl text-sm font-medium z-50 flex">
+                    <div className="flex flex-col border-r border-gray-700 pr-3 min-w-[100px]">
+                      {Object.keys(formatOptions).map((section) => (
+                        <button
+                          key={section}
+                          className={`text-left px-2 py-1 rounded hover:bg-[#333] ${
+                            item.section === section ? "text-white font-bold" : "text-gray-400"
+                          }`}
+                          onClick={() => setSection(index, section)}
+                        >
+                          {section.charAt(0).toUpperCase() + section.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex-1 pl-4">
+                      <div className="grid grid-cols-2 gap-2">
+                        {(formatOptions[item.section] || []).map((format) => (
+                          <button
+                            key={format}
+                            className="bg-[#333] hover:bg-red-600 transition px-3 py-2 rounded text-white text-xs"
+                            onClick={() => selectFormat(index, format)}
+                          >
+                            {format}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col items-center justify-center space-y-2 rounded-md">
+        <h1 className="text-gray-500 text-center mt-4">
+          Make sure you have uploaded valid files otherwise conversion will not be correct
+        </h1>
+        <button
+          onClick={handleConvert}
+          disabled={isConverting || selectedFiles.length === 0}
+          className={`flex items-center gap-2 bg-red-400 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-red-500 transition ${
+            isConverting || selectedFiles.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          <FiArrowRight className="text-[16px]" />
+          {isConverting ? "Converting..." : "Convert files"}
+        </button>
+        {downloadUrl && (
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-2 bg-green-500 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-green-600 transition"
+          >
+            <FiDownload className="text-[16px]" />
+            Download Converted Files
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+then i have Dropdownmenu.tsx file 
+// Dropdownmenu.tsx
+import { useNavigate } from "react-router-dom";
+import {
+  FileAudio,
+  FileVideo,
+  Image,
+  FileText,
+  Server,
+  TabletSmartphone,
+  BookOpen,
+  Compass,
+  Activity,
+} from "lucide-react";
+import React from "react";
+
+interface ConverterItem {
+  icon: React.ReactElement;
+  label: string;
+  slug: string;
+}
+
+interface DropdownMenuProps {
+  closeDropdown: () => void;
+}
+
+const converters: ConverterItem[] = [
+  { icon: <FileAudio className="text-red-500 w-6 h-6" />, label: "Audio Converter", slug: "audio" },
+  { icon: <FileVideo className="text-red-500 w-6 h-6" />, label: "Video Converter", slug: "video" },
+  { icon: <Image className="text-red-500 w-6 h-6" />, label: "Image Converter", slug: "image" },
+  { icon: <FileText className="text-red-500 w-6 h-6" />, label: "Document Converter", slug: "document" },
+  { icon: <Server className="text-red-500 w-6 h-6" />, label: "Archive Converter", slug: "archive" },
+  { icon: <TabletSmartphone className="text-red-500 w-6 h-6" />, label: "Device Converter", slug: "device" },
+  { icon: <Activity className="text-red-500 w-6 h-6" />, label: "Webservice Converter", slug: "webservice" },
+  { icon: <BookOpen className="text-red-500 w-6 h-6" />, label: "Ebook Converter", slug: "ebook" },
+  { icon: <Compass className="text-red-500 w-6 h-6" />, label: "Image Compressor", slug: "compressor" },
+];
+
+const Dropdownmenu: React.FC<DropdownMenuProps> = ({ closeDropdown }) => {
+  const navigate = useNavigate();
+
+  const handleNavigate = (slug: string) => {
+    navigate(`/converter/${slug}`);
+    closeDropdown(); // ✅ Close dropdown after navigation
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-y-4 w-full p-4">
+      {converters.map((item, index) => (
+        <div
+          key={index}
+          onClick={() => handleNavigate(item.slug)}
+          className="flex items-center space-x-4 p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 cursor-pointer"
+        >
+          <div className="w-12 h-12 flex items-center justify-center rounded-full bg-gray-50">
+            {item.icon}
+          </div>
+          <span className="text-sm font-medium text-gray-800">{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default Dropdownmenu;
+
+then i have Features.tsx file 
+import { FaCog, FaStar } from "react-icons/fa";
+
+const Features = () => {
+  return (
+    <section className="bg-white py-16">
+      <div className="max-w-5xl mx-auto px-4 grid grid-cols-2 gap-12 text-center">
+        {/* Feature 1 */}
+        <div className="flex flex-col items-center">
+          <div className="w-16 h-16 mb-6 flex items-center justify-center rounded-full border border-black">
+            <FaCog className="text-red-500 text-xl" />
+          </div>
+          <h3 className="text-lg font-semibold mb-4">300+ formats supported</h3>
+          <p className="text-gray-800 leading-7 max-w-xs">
+            We support more than 25600 different conversions between more than 300
+            different file formats. More than any other converter.
+          </p>
+        </div>
+
+        {/* Feature 2 */}
+        <div className="flex flex-col items-center">
+          <div className="w-16 h-16 mb-6 flex items-center justify-center rounded-full border border-black">
+            <FaStar className="text-red-500 text-xl" />
+          </div>
+          <h3 className="text-lg font-semibold mb-4">Fast and easy</h3>
+          <p className="text-gray-800 leading-7 max-w-xs">
+            Just drop your files on the page, choose an output format and click "Convert" button.
+            Wait a little for the process to complete.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default Features;
+
+then i have Fileconverter.tsx file 
+import React, { useState } from 'react';
+import {
+  ChevronDown,
+  Music,
+  Video,
+  Archive,
+  Book,
+  Image,
+  
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // ✅ import navigate
+
+const FileConverters = () => {
+  const [openSections, setOpenSections] = useState<string[]>([]);
+  const navigate = useNavigate(); // ✅ for navigation
+
+  interface ConverterOption {
+    icon: React.ReactNode;
+    title: string;
+  }
+
+  interface Converter {
+    id: string;
+    title: string;
+    icon: React.ReactNode;
+    options: ConverterOption[];
+  }
+
+  const toggleSection = (sectionId: string) => {
+    setOpenSections((prev) =>
+      prev.includes(sectionId)
+        ? prev.filter((id) => id !== sectionId)
+        : [...prev, sectionId]
+    );
+  };
+
+  const converters: Converter[] = [
+    {
+      id: 'audio',
+      title: 'Audio Converter',
+      icon: <Music className="w-5 h-5" />,
+      options: [
+        { icon: <Music className="w-4 h-4" />, title: 'MP3 to WAV' },
+        { icon: <Music className="w-4 h-4" />, title: 'WAV to MP3' },
+        { icon: <Music className="w-4 h-4" />, title: 'AAC to MP3' },
+        { icon: <Music className="w-4 h-4" />, title: 'FLAC to MP3' },
+      ],
+    },
+    {
+      id: 'video',
+      title: 'Video Converter',
+      icon: <Video className="w-5 h-5" />,
+      options: [
+        { icon: <Video className="w-4 h-4" />, title: 'MP4 to MP3' },
+        { icon: <Video className="w-4 h-4" />, title: 'AVI to MP4' },
+        { icon: <Video className="w-4 h-4" />, title: 'MOV to MP4' },
+        { icon: <Video className="w-4 h-4" />, title: 'WEBM to MP4' },
+      ],
+    },
+    {
+      id: 'archive',
+      title: 'Archive Converter',
+      icon: <Archive className="w-5 h-5" />,
+      options: [
+        { icon: <Archive className="w-4 h-4" />, title: 'ZIP to TAR.GZ' },
+        { icon: <Archive className="w-4 h-4" />, title: 'TAR.GZ to ZIP' },
+        { icon: <Archive className="w-4 h-4" />, title: '7Z to ZIP' },
+        { icon: <Archive className="w-4 h-4" />, title: 'TAR to ZIP' },
+      ],
+    },
+    {
+      id: 'ebook',
+      title: 'Ebook Converter',
+      icon: <Book className="w-5 h-5" />,
+      options: [
+        { icon: <Book className="w-4 h-4" />, title: 'EPUB to PDF' },
+        { icon: <Book className="w-4 h-4" />, title: 'MOBI to PDF' },
+        { icon: <Book className="w-4 h-4" />, title: 'PDF to EPUB' },
+        { icon: <Book className="w-4 h-4" />, title: 'AZW3 to PDF' },
+      ],
+    },
+    {
+      id: 'image',
+      title: 'Image Converter',
+      icon: <Image className="w-5 h-5" />,
+      options: [
+        { icon: <Image className="w-4 h-4" />, title: 'PNG to JPG' },
+        { icon: <Image className="w-4 h-4" />, title: 'JPG to PNG' },
+        { icon: <Image className="w-4 h-4" />, title: 'WEBP to JPG' },
+        { icon: <Image className="w-4 h-4" />, title: 'SVG to JPG' },
+      ],
+    },
+  ];
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-10">
+      <h1 className="text-3xl text-center text-gray-800 mb-10 font-normal">
+        File Converters
+      </h1>
+
+      <div className="space-y-2">
+        {converters.map((converter) => {
+          const isOpen = openSections.includes(converter.id);
+
+          return (
+            <div
+              key={converter.id}
+              className="bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 "
+            >
+              {/* Header */}
+              <div
+                className="text-white px-5 py-3 cursor-pointer transition-colors duration-300 flex items-center justify-between select-none"
+                style={{ backgroundColor: '#dc3545' }}
+                onMouseEnter={(e) =>
+                  ((e.target as HTMLElement).style.backgroundColor = '#c02a37')
+                }
+                onMouseLeave={(e) =>
+                  ((e.target as HTMLElement).style.backgroundColor = '#dc3545')
+                }
+                onClick={() => toggleSection(converter.id)}
+              >
+                <div className="flex items-center">
+                  <span className="mr-4">{converter.icon}</span>
+                </div>
+                <span className="text-lg font-medium text-center">{converter.title}</span>
+                <ChevronDown
+                  className={`w-5 h-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''
+                    }`}
+                />
+              </div>
+
+              {/* Expandable content */}
+              <div
+                className={`transition-all duration-400 ease-in-out overflow-hidden bg-gray-50 ${isOpen ? 'max-h-[500px] opacity-100 py-5 px-5' : 'max-h-0 opacity-0 py-0 px-5'
+                  }`}
+              >
+                {converter.options.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    {converter.options.map((option, index) => (
+                      <div
+                        key={index}
+                        className="text-white px-5 py-3 rounded-lg cursor-pointer transition-colors duration-200 flex items-center justify-center"
+                        style={{ backgroundColor: '#dc3545' }}
+                        onMouseEnter={(e) =>
+                          ((e.target as HTMLElement).style.backgroundColor = '#c02a37')
+                        }
+                        onMouseLeave={(e) =>
+                          ((e.target as HTMLElement).style.backgroundColor = '#dc3545')
+                        }
+                        onClick={() =>
+                          navigate(`/converter/${encodeURIComponent(option.title.toLowerCase().replace(/\s+/g, "-"))}`, {
+                            state: { fromFileConverter: true },
+                          })
+                        }                      >
+                        <span className="mr-3">{option.icon}</span>
+                        <span className="font-medium">{option.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default FileConverters;
+
+then i have Footer.tsx file 
+
+const Footer = () => {
+    return (
+        <footer className="bg-[#282828] text-[#c9c9c9] text-[15px]">
+            {/* Grid Layout: 2 Main Columns (6 + 6) */}
+            <div className="grid grid-cols-12 gap-x-12 gap-y-10 w-full p-12  ml-0 mx-auto">
+                {/* Left Column: Title + Paragraph */}
+                <div className="col-span-6 md:col-span-6">
+                    <h6 className="text-[#b0b0b0] font-medium mb-4">Conterter</h6>
+                    <p className="leading-7 text-[19px]">
+                        Converter is an online service that allows you to convert files from one format to another. 
+                        We support a wide range of formats, including documents, images, audio and video files.
+                         Our service is free and easy to use, and we also provide a range of tools and features to help you manage your files more effectively
+                    </p>
+                </div>
+
+                {/* Right Column: Navigation + Tool Links combined */}
+                <div className="col-span-6 md:col-span-6 grid grid-cols-2 gap-6">
+                    {/* Navigation Links */}
+                    <div className="flex flex-col space-y-3">
+                        <a href="#" className="hover:text-white">Home</a>
+                        <a href="#" className="hover:text-white">About</a>
+                        <a href="#" className="hover:text-white">Blogs</a>
+                        <a href="#" className="hover:text-white">Contact</a>
+                    </div>
+
+                    {/* Tool Links */}
+                    <div className="flex flex-col space-y-3">
+                        <a href="#" className="hover:text-white">Video Converter</a>
+                        <a href="#" className="hover:text-white">Audio Converter</a>
+                        <a href="#" className="hover:text-white">Document Converter</a>
+                        <a href="#" className="hover:text-white">Image Converter</a>
+                    </div>
+                </div>
+            </div>
+
+            {/* Divider Line */}
+            <div className="border-t border-[#333]" />
+
+            {/* Bottom Section */}
+            <div className="max-w-7xl mx-auto px-12 py-8 text-center text-[#999] text-[14px]">
+                <p>©2025 JahaSoft. All rights reserved.</p>
+                <div className="mt-2 space-x-6 mt-6">
+                    <a href="#" className="hover:text-white">Terms of Use</a>
+                    <a href="#" className="hover:text-white">Privacy Policy</a>
+                </div>
+            </div>
+        </footer>
+    );
+};
+
+export default Footer;
+
+then i have Heading.tsx file 
+import React from "react";
+
+interface HeadingProps {
+  selectedConverter: string | null;
+  description?: string;
+}
+
+const Heading: React.FC<HeadingProps> = ({ selectedConverter, description }) => {
+  const getHeadingText = () => {
+    if (!selectedConverter) return "File Converter";
+
+    switch (selectedConverter) {
+      case "Audio Converter":
+        return "Audio Converter";
+      case "Video Converter":
+        return "Video Converter";
+      case "Image Converter":
+        return "Image Converter";
+      case "Document Converter":
+        return "Document Converter";
+      case "Archive Converter":
+        return "Archive Converter";
+      case "Device Converter":
+        return "Device Converter";
+      case "Webservice Converter":
+        return "Webservice Converter";
+      case "Ebook Converter":
+        return "Ebook Converter";
+      case "Image Compressor":
+        return "Image Compressor";
+      default:
+        return selectedConverter; // dynamic like "MP3 to WAV Converter"
+    }
+  };
+
+  const getSubtitleText = () => {
+    if (!selectedConverter) return "Convert your files to any format";
+
+    switch (selectedConverter) {
+      case "Audio Converter":
+        return "Convert your audio files to any format";
+      case "Video Converter":
+        return "Convert your video files to any format";
+      case "Image Converter":
+        return "Convert your image files to any format";
+      case "Document Converter":
+        return "Convert your document files to any format";
+      case "Archive Converter":
+        return "Convert your archive files to any format";
+      case "Device Converter":
+        return "Convert files for your devices";
+      case "Webservice Converter":
+        return "Convert files using web services";
+      case "Ebook Converter":
+        return "Convert your ebook files to any format";
+      case "Image Compressor":
+        return "Compress your images efficiently";
+      default:
+        return description || "Convert your files quickly and securely";
+    }
+  };
+
+  return (
+    <div className="text-center py-5">
+      <h1 className="text-[48px] font-[700] text-[#ec2d3f] mb-4">
+        {getHeadingText()}
+      </h1>
+      <p className="text-[19px] font-[400] text-[#000]">
+        {getSubtitleText()}
+      </p>
+    </div>
+  );
+};
+
+export default Heading;
+
+then i have Instruction.tsx file 
+// src/components/Instructions.tsx
+import React from "react";
+
+interface InstructionsProps {
+  converterType: string;
+}
+
+const Instructions: React.FC<InstructionsProps> = ({ converterType }) => {
+  const getInstructionTitle = () => {
+    return `How to use ${converterType}?`;
+  };
+
+  const getInstructions = () => {
+    if (converterType.toLowerCase().includes("converter")) {
+      const baseType = converterType.replace(" Converter", "").toLowerCase();
+
+      switch (baseType) {
+        case "audio":
+          return [
+            'Click the "Choose Files" button to select your audio files (up to 20 files at a time)',
+            "Select the output format for your audio files",
+            'Click on the "Convert" button to start the audio conversion',
+            'When the status changes to "Done", click the "Download" button to get your converted audio files',
+          ];
+        case "video":
+          return [
+            'Click the "Choose Files" button to select your video files (up to 20 files at a time)',
+            "Choose the desired output format for your video files",
+            'Click on the "Convert" button to start the video conversion',
+            'When the status changes to "Done", click the "Download" button to get your converted video files',
+          ];
+        case "image":
+          return [
+            'Click the "Choose Files" button to select your image files (up to 20 files at a time)',
+            "Select the target image format for conversion",
+            'Click on the "Convert" button to start the image conversion',
+            'When the status changes to "Done", click the "Download" button to get your converted images',
+          ];
+        case "document":
+          return [
+            'Click the "Choose Files" button to select your document files (up to 20 files at a time)',
+            "Choose the output document format you need",
+            'Click on the "Convert" button to start the document conversion',
+            'When the status changes to "Done", click the "Download" button to get your converted documents',
+          ];
+        case "archive":
+          return [
+            'Click the "Choose Files" button to select your archive files (up to 20 files at a time)',
+            "Select the desired archive format for conversion",
+            'Click on the "Convert" button to start the archive conversion',
+            'When the status changes to "Done", click the "Download" button to get your converted archives',
+          ];
+        case "device":
+          return [
+            'Click the "Choose Files" button to select your files (up to 20 files at a time)',
+            "Choose your target device or device-specific format",
+            'Click on the "Convert" button to start the device-optimized conversion',
+            'When the status changes to "Done", click the "Download" button to get your device-compatible files',
+          ];
+        case "webservice":
+          return [
+            'Click the "Choose Files" button to select your files (up to 20 files at a time)',
+            "Select the web service format you need",
+            'Click on the "Convert" button to start the web service conversion',
+            'When the status changes to "Done", click the "Download" button to get your converted files',
+          ];
+        case "ebook":
+          return [
+            'Click the "Choose Files" button to select your ebook files (up to 20 files at a time)',
+            "Choose the target ebook format (EPUB, PDF, MOBI, etc.)",
+            'Click on the "Convert" button to start the ebook conversion',
+            'When the status changes to "Done", click the "Download" button to get your converted ebooks',
+          ];
+        case "compressor":
+          return [
+            'Click the "Choose Files" button to select your image files (up to 20 files at a time)',
+            "Adjust compression settings if needed",
+            'Click on the "Compress" button to start the image compression',
+            'When the status changes to "Done", click the "Download" button to get your compressed images',
+          ];
+      }
+    }
+
+    return [
+      'Click the "Choose Files" button to select your files (up to 20 files at a time)',
+      "Select the output format for your files",
+      'Click on the "Convert" button to start the conversion',
+      'When the status changes to "Done", click the "Download" button',
+    ];
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto bg-white px-8 py-10 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.15)]">
+      <h2 className="text-[28px] font-[600] text-center mb-6 text-black">
+        {getInstructionTitle()}
+      </h2>
+      <ol className="space-y-3 text-[18px] text-[#1a1a1a]">
+        {getInstructions().map((instruction, index) => (
+          <li key={index}>
+            {index + 1}. {instruction}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+};
+
+export default Instructions;
+
+then i have Navbar.tsx file 
+import { useState, useRef, useEffect } from "react";
+import { ChevronDown } from "lucide-react";
+import Dropdownmenu from "./Dropdownmenu";
+
+const Navbar = () => {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const toggleButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target) &&
+        toggleButtonRef.current &&
+        !toggleButtonRef.current.contains(target)
+      ) {
+        setDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  return (
+    <>
+      <nav className="sticky top-0 z-50 flex items-center justify-between px-8 py-3 bg-white shadow-md transition-shadow duration-200">
+        <div className="flex items-center space-x-10 gap-5">
+          <img
+            src="https://convertio.info/assets/img/logo.png"
+            alt="Converter Logo"
+            className="w-13 h-6 object-contain"
+          />
+          <div className="flex ml-10 space-x-6 text-lg gap-5 text-[15px]">
+            <a href="/" className="hover:text-red-600">
+              Home
+            </a>
+            <button
+              ref={toggleButtonRef}
+              onClick={() => setDropdownOpen((prev) => !prev)}
+              className="flex items-center hover:text-red-600 focus:outline-none"
+            >
+              Converter <ChevronDown size={14} className="ml-1" />
+            </button>
+            <a href="#">About</a>
+            <a href="#">Blogs</a>
+            <a href="#">Contact</a>
+          </div>
+        </div>
+        <div>
+          <input
+            type="text"
+            placeholder="Search converter..."
+            className="border p-5 pl-4 pr-4 py-1 text-md mr-10 w-100 focus:outline-none focus:ring-2 rounded-lg"
+          />
+        </div>
+      </nav>
+
+      {dropdownOpen && (
+        <div
+          ref={dropdownRef}
+          className={`fixed top-[50px] left-0 w-full bg-white shadow-md border-t z-[999] transition-all duration-300 ease-in-out
+  ${dropdownOpen ? "opacity-100 visible translate-y-0" : "opacity-0 invisible -translate-y-2"}`}
+        >
+
+          <div className="max-w-6xl mx-auto px-4 py-6">
+            <Dropdownmenu closeDropdown={() => setDropdownOpen(false)} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default Navbar;
+
+then i have RealtedTools.tsx file 
+import { useParams, useNavigate } from "react-router-dom";
+
+const tools: string[] = [
+  // MP3 Converters
+  "MP3 to AAC Converter", "MP3 to AIFF Converter", "MP3 to FLAC Converter", "MP3 to M4V Converter",
+  "MP3 to MMF Converter", "MP3 to OGG Converter", "MP3 to OPUS Converter", "MP3 to WAV Converter",
+  "MP3 to WMA Converter", "MP3 to 3G2 Converter", "MP3 to 3GP Converter", "MP3 to AVI Converter",
+  "MP3 to FLV Converter", "MP3 to MKV Converter", "MP3 to MOV Converter", "MP3 to MP4 Converter",
+  "MP3 to MPG Converter", "MP3 to OGV Converter", "MP3 to WEBM Converter", "MP3 to WMV Converter",
+
+  // WAV Converters
+  "WAV to AAC Converter", "WAV to AIFF Converter", "WAV to FLAC Converter", "WAV to M4V Converter",
+  "WAV to MMF Converter", "WAV to MP3 Converter", "WAV to OGG Converter", "WAV to OPUS Converter",
+  "WAV to WMA Converter", "WAV to 3G2 Converter", "WAV to 3GP Converter", "WAV to AVI Converter",
+  "WAV to FLV Converter", "WAV to MKV Converter", "WAV to MOV Converter", "WAV to MP4 Converter",
+  "WAV to MPG Converter", "WAV to OGV Converter", "WAV to WEBM Converter", "WAV to WMV Converter",
+
+  // AAC Converters
+  "AAC to FLAC Converter", "AAC to M4V Converter", "AAC to MMF Converter", "AAC to MP3 Converter",
+  "AAC to OGG Converter", "AAC to OPUS Converter", "AAC to WAV Converter", "AAC to WMA Converter",
+  "AAC to 3G2 Converter", "AAC to 3GP Converter", "AAC to AVI Converter", "AAC to FLV Converter",
+  "AAC to MKV Converter", "AAC to MOV Converter", "AAC to MP4 Converter", "AAC to MPG Converter",
+  "AAC to OGV Converter", "AAC to WEBM Converter", "AAC to WMV Converter", "AAC to AIFF Converter",
+
+  // FLAC Converters
+  "FLAC to AAC Converter", "FLAC to AIFF Converter", "FLAC to M4V Converter", "FLAC to MMF Converter",
+  "FLAC to MP3 Converter", "FLAC to OGG Converter", "FLAC to OPUS Converter", "FLAC to WAV Converter",
+  "FLAC to WMA Converter", "FLAC to 3G2 Converter", "FLAC to 3GP Converter", "FLAC to AVI Converter",
+  "FLAC to FLV Converter", "FLAC to MKV Converter", "FLAC to MOV Converter", "FLAC to MP4 Converter",
+  "FLAC to MPG Converter", "FLAC to OGV Converter", "FLAC to WEBM Converter", "FLAC to WMV Converter",
+
+  // AVI Converters
+  "AVI to MP4 Converter", "AVI to WMV Converter", "AVI to MOV Converter", "AVI to MKV Converter",
+  "AVI to FLV Converter", "AVI to WEBM Converter",
+
+  // MOV Converters
+  "MOV to MP4 Converter", "MOV to AVI Converter", "MOV to WMV Converter", "MOV to MKV Converter",
+  "MOV to FLV Converter", "MOV to WEBM Converter",
+
+  // WEBM Converters
+  "WEBM to MP4 Converter", "WEBM to AVI Converter", "WEBM to WMV Converter", "WEBM to MOV Converter",
+  "WEBM to MKV Converter", "WEBM to FLV Converter",
+
+  // Archive Converters
+  "ZIP to TAR.GZ Converter", "TAR.GZ to ZIP Converter", "7Z to ZIP Converter", "TAR to ZIP Converter",
+
+  // Ebook Converters
+  "EPUB to PDF Converter", "MOBI to PDF Converter", "AZW3 to PDF Converter",
+
+  // PDF Converters
+  "PDF to DOCX Converter", "PDF to DOC Converter", "PDF to HTML Converter", "PDF to ODT Converter",
+  "PDF to RTF Converter", "PDF to TXT Converter", "PDF to XLSX Converter", "PDF to XLS Converter",
+  "PDF to ODS Converter", "PDF to PPTX Converter", "PDF to PPT Converter", "PDF to ODP Converter",
+  "PDF to EPUB Converter",
+
+  // PNG Converters
+  "PNG to BMP Converter", "PNG to EPS Converter", "PNG to GIF Converter", "PNG to ICO Converter",
+  "PNG to JPEG Converter", "PNG to SVG Converter", "PNG to TGA Converter", "PNG to TIFF Converter",
+  "PNG to WBMP Converter", "PNG to WEBP Converter", "PNG to JPG Converter",
+
+  // JPG Converters
+  "JPG to BMP Converter", "JPG to EPS Converter", "JPG to GIF Converter", "JPG to ICO Converter",
+  "JPG to JPEG Converter", "JPG to PNG Converter", "JPG to SVG Converter", "JPG to TGA Converter",
+  "JPG to TIFF Converter", "JPG to WBMP Converter", "JPG to WEBP Converter",
+
+  // WEBP Converters
+  "WEBP to BMP Converter", "WEBP to EPS Converter", "WEBP to GIF Converter", "WEBP to ICO Converter",
+  "WEBP to JPG Converter", "WEBP to JPEG Converter", "WEBP to PNG Converter", "WEBP to SVG Converter",
+  "WEBP to TGA Converter", "WEBP to TIFF Converter", "WEBP to WBMP Converter",
+
+  // SVG Converters
+  "SVG to BMP Converter", "SVG to EPS Converter", "SVG to GIF Converter", "SVG to ICO Converter",
+  "SVG to JPG Converter", "SVG to JPEG Converter", "SVG to PNG Converter", "SVG to TGA Converter",
+  "SVG to TIFF Converter", "SVG to WBMP Converter", "SVG to WEBP Converter",
+];
+
+export default function RelatedTools() {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+
+  // Convert slug from "mp3-to-wav" to "MP3 to WAV"
+  const formatSlug = (slug: string) => {
+    return slug
+      .split("-")
+      .map((word) =>
+        word.toLowerCase() === "to"
+          ? "to"
+          : word.charAt(0).toUpperCase() + word.slice(1)
+      )
+      .join(" ");
+  };
+
+  const formattedSlug = slug ? formatSlug(slug) : "";
+  const sourceFormat = formattedSlug.split(" to ")[0];
+
+  const related = tools.filter((tool) =>
+    tool.toLowerCase().startsWith(sourceFormat.toLowerCase() + " to")
+  );
+
+  const handleNavigation = (toolName: string) => {
+    const toolSlug = toolName
+      .replace(" Converter", "")
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+    navigate(`/converter/${toolSlug}`, {
+      state: { fromFileConverter: true },
+    });
+  };    
+
+  return (
+<div className="max-w-3xl mt-10 mx-auto bg-white px-8 py-10 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.15)]">
+      <h2 className="text-2xl font-semibold text-center mb-6">Related Tools</h2>
+      {related.length === 0 ? (
+        <p className="text-center text-gray-500">No related tools found.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-5">
+          {related.map((tool, index) => (
+            <button
+              key={index}
+              onClick={() => handleNavigation(tool)}
+              className="bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded text-sm w-full text-left"
+            >
+              {tool}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+then i have pages folder in that i have ConverterPage.tsx file 
+// src/pages/ConverterPage.tsx
+
+import { useParams, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import Navbar from "../components/Navbar";
+import Instructions from "../components/Instruction";
+import Heading from "../components/Heading";
+import Dropbox from "../components/Dropbox";
+import Features from "../components/Features";
+import RelatedTools from "../components/RelatedTools";
+import Footer from "../components/Footer";
+
+const ConverterPage = () => {
+  const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
+  const fromFileConverter = location.state?.fromFileConverter || false;
+
+  useEffect(() => {
+    console.log("🚀 Loaded ConverterPage with slug:", slug);
+
+    // Scroll to top if navigated from FileConverters
+    if (fromFileConverter) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [slug, fromFileConverter]);
+
+  const formatSlugToTitle = (slug: string): string => {
+    return slug
+      .split("-")
+      .map((word) =>
+        word.toLowerCase() === "to"
+          ? "to"
+          : word.charAt(0).toUpperCase() + word.slice(1)
+      )
+      .join(" ");
+  };
+
+  const slugToConverterLabel = (slug: string | undefined): string => {
+    switch (slug) {
+      case "audio":
+        return "Audio Converter";
+      case "video":
+        return "Video Converter";
+      case "image":
+        return "Image Converter";
+      case "document":
+        return "Document Converter";
+      case "archive":
+        return "Archive Converter";
+      case "device":
+        return "Device Converter";
+      case "webservice":
+        return "Webservice Converter";
+      case "ebook":
+        return "Ebook Converter";
+      case "compressor":
+        return "Image Compressor";
+      default:
+        return slug ? `${formatSlugToTitle(slug)} Converter` : "File Converter";
+    }
+  };
+
+  const converterLabel = slugToConverterLabel(slug);
+  const description = slug
+    ? `Convert ${formatSlugToTitle(slug)} online at Convertig.com. Fast, free, and secure converter — no software needed. Upload your file and get output instantly.`
+    : "Convert files online at Convertig.com. Fast, free, and secure — no software needed.";
+
+  return (
+    <div className="min-h-screen bg-white text-black">
+      <Navbar />
+      <Heading selectedConverter={converterLabel} description={description} />
+      <Dropbox />
+      <Features />
+      <Instructions converterType={converterLabel} />
+      {fromFileConverter && <RelatedTools />}
+      <Footer />
+    </div>
+  );
+};
+
+export default ConverterPage;
+
+then i have HomePage.tsx file 
+import Navbar from "../components/Navbar";
+import Dropbox from "../components/Dropbox";
+import Features from "../components/Features";
+import Footer from "../components/Footer";
+import FileConverter from "../components/Fileconverter";
+import Heading from "../components/Heading";
+
+const Homepage = () => {
+  return (
+    <div className="min-h-screen bg-white text-black">
+      <Navbar />
+      <Heading selectedConverter={null} />
+      <Dropbox />
+      <Features />
+      <FileConverter />
+      <Footer />
+    </div>
+  );
+};
+
+export default Homepage;
+
+then i have App.tsx file
+ import { Routes, Route } from "react-router-dom";
+import Homepage from "./pages/Homepage";
+import ConverterPage from "./pages/ConverterPage";
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Homepage />} />
+      <Route path="/converter/:slug" element={<ConverterPage />} />
+    </Routes>
+  );
+}
+
+export default App;
+
+then i have main.tsx file 
+import React, { useEffect } from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App";
+import "./index.css";
+
+// Load Dropbox SDK dynamically using .env key
+const loadDropboxScript = () => {
+  const existingScript = document.getElementById("dropboxjs");
+  if (existingScript) return;
+
+  const script = document.createElement("script");
+  script.src = "https://www.dropbox.com/static/api/2/dropins.js";
+  script.id = "dropboxjs";
+  script.type = "text/javascript";
+  script.setAttribute(
+    "data-app-key",
+    import.meta.env.VITE_DROPBOX_APP_KEY || ""
+  );
+  document.body.appendChild(script);
+};
+
+const Root = () => {
+  useEffect(() => {
+    loadDropboxScript();
+  }, []);
+
+  return (
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <Root />
+  </React.StrictMode>
+);
+
+then i have vite-env.d.ts file 
+/// <reference types="vite/client" />
+then i have .env file 
+VITE_GOOGLE_CLIENT_ID=866725812936-fvjl5btdg8d8s8mc03aihrvs3tmj3q6h.apps.googleusercontent.com
+VITE_GOOGLE_API_KEY=AIzaSyDtxORXGl-d3mMhG4TKBGS90scPCX7JGyM
+VITE_DROPBOX_APP_KEY=2434iawyecdjpxc
+VITE_API_URL=http://localhost:5000
+then i have tsconfig.app.json file 
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src"]
+}
+then i have tsconfig.json file
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+
+this is my frontened code 
