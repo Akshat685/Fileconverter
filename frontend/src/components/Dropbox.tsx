@@ -32,7 +32,7 @@ interface FormatOptions {
 export default function Dropbox() {
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID!;
   const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY!;
-  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const API_URL = import.meta.env.VITE_API_URL || "https://fileconverter-backend.onrender.com";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerLoaded = useRef(false);
