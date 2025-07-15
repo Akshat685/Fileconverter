@@ -15,14 +15,14 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors({
-  origin: [
-    'http://localhost:5173',           
-    'https://fileconverter-pi.vercel.app/'  
-  ],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-}));
+// app.use(cors({
+//   origin: [
+//     'http://localhost:5173',     ],
+//   methods: ['GET', 'POST', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type'],
+// }));
+
+app.use(cors());
 
 // Supported formats for each type
 const supportedFormats = {
