@@ -101,7 +101,7 @@ export default function Dropbox() {
               });
             } catch (err) {
               console.error("Google API initialization failed:", err);
-              setErrorMessage("Failed to initialize Google API. Check your API key and client ID.");
+              // setErrorMessage("Failed to initialize Google API. Check your API key and client ID.");
             }
           });
         };
