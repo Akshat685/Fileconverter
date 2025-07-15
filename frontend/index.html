@@ -4,23 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Converter</title>
-
-    <!-- ✅ Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- ✅ Google Picker API -->
     <script>
       window.onApiLoad = function () {
-        // This will be overridden by React in useEffect
-        console.log("Google API loaded - placeholder");
+        console.log("Google API script loaded");
+      };
+      window.onerror = function (msg, url, lineNo, columnNo, error) {
+        if (url.includes("apis.google.com")) {
+          console.error("Failed to load Google API script:", msg, error);
+        }
       };
     </script>
-    <script src="https://apis.google.com/js/api.js?onload=onApiLoad"></script>
+    <script
+      src="https://apis.google.com/js/api.js?onload=onApiLoad"
+      async
+      onerror="console.error('Failed to load Google API script')"
+    ></script>
   </head>
   <body>
     <div id="root"></div>
-
-    <!-- ✅ Main React App -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
