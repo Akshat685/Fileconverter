@@ -57,7 +57,7 @@ fsPromises.mkdir(uploadsDir, { recursive: true });
 fsPromises.mkdir(convertedDir, { recursive: true });
 
 // Conversion route
-app.post('/api/convert', upload.array('files', 5), async (req, res) => {
+app.post('/api/convert', upload.array('files', 1), async (req, res) => {
   console.log('Received /api/convert request');
   try {
     const files = req.files;
@@ -74,10 +74,11 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       console.error('No files uploaded');
       return res.status(400).json({ error: 'No files uploaded' });
     }
+
     if (files.length !== formats.length) {
       console.error(`Mismatch between files (${files.length}) and formats (${formats.length})`);
-      return res.status(400).json({ 
-        error: `Mismatch between files and formats. Files: ${files.length}, Formats: ${formats.length}` 
+      return res.status(400).json({
+        error: `Mismatch between files and formats. Files: ${files.length}, Formats: ${formats.length}`,
       });
     }
 
@@ -94,24 +95,12 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       if (!Object.keys(supportedFormats).includes(formatInfo.type)) {
         throw new Error(`Unsupported conversion type: ${formatInfo.type}`);
       }
+
       if (!supportedFormats[formatInfo.type].includes(outputExt)) {
         throw new Error(`Unsupported output format: ${outputExt} for type ${formatInfo.type}`);
       }
-      const allowedInputs = formatInfo.type === 'pdfs' 
-        ? ['pdf'] 
-        : formatInfo.type === 'document' 
-          ? ['docx', 'pdf', 'txt', 'rtf', 'odt']
-          : formatInfo.type === 'image' || formatInfo.type === 'compressor'
-            ? ['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg']
-            : formatInfo.type === 'audio'
-              ? ['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma']
-              : formatInfo.type === 'video'
-                ? ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv']
-                : formatInfo.type === 'archive'
-                  ? ['zip', '7z']
-                  : formatInfo.type === 'ebook'
-                    ? ['epub', 'mobi', 'pdf', 'azw3']
-                    : [];
+
+      const allowedInputs = supportedFormats[formatInfo.type];
       if (!allowedInputs.includes(inputExt)) {
         throw new Error(`Unsupported input format: ${inputExt} for type ${formatInfo.type}`);
       }
@@ -146,28 +135,31 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
         default:
           throw new Error(`Unsupported conversion type: ${formatInfo.type}`);
       }
+
       outputFiles.push(outputPath);
     }
 
-    // Create ZIP file
-    const zipPath = path.join(convertedDir, `converted_${Date.now()}.zip`);
-    await createZip(outputFiles, zipPath);
-
-    // Send ZIP file
-    res.download(zipPath, 'converted_files.zip', async (err) => {
-      if (err) {
-        console.error('Error sending file:', err);
-        res.status(500).json({ error: 'Failed to send converted files' });
-      }
-      // Clean up
-      await cleanupFiles([...files.map(f => f.path), ...outputFiles, zipPath]);
-    });
+    if (outputFiles.length === 1) {
+      const filePath = outputFiles[0];
+      const fileName = path.basename(filePath);
+      res.download(filePath, fileName, async (err) => {
+        if (err) {
+          console.error('Error sending file:', err);
+          res.status(500).json({ error: 'Failed to send converted file' });
+        }
+        await cleanupFiles([...files.map(f => f.path), filePath]);
+      });
+    } else {
+      res.status(400).json({ error: 'Only one file can be converted at a time for direct download.' });
+      await cleanupFiles([...files.map(f => f.path), ...outputFiles]);
+    }
   } catch (error) {
     console.error('Conversion error:', error.message);
     res.status(500).json({ error: error.message });
     await cleanupFiles(req.files ? req.files.map(f => f.path) : []);
   }
 });
+
 
 // Conversion functions
 async function convertImage(inputPath, outputPath, format) {
