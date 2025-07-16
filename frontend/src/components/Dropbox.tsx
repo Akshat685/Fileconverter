@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, Component, ReactNode } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FaFolderOpen, FaDropbox, FaGoogleDrive } from "react-icons/fa";
 import { FiArrowRight, FiDownload } from "react-icons/fi";
 
@@ -57,37 +57,19 @@ interface ConvertedFile {
   originalId: string;
 }
 
-// Error Boundary Component
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return <div className="text-red-500 text-center p-4">Something went wrong. Please refresh the page.</div>;
-    }
-    return this.props.children;
-  }
-}
-
 export default function Dropbox() {
-  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-  const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || "";
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID!;
+  const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY!;
   const API_URL = import.meta.env.VITE_API_URL || "https://fileconverter-backend.onrender.com";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerLoaded = useRef(false);
   const [selectedFiles, setSelectedFiles] = useState<FileItem[]>([]);
   const [isConverting, setIsConverting] = useState(false);
-  const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]); // Fixed typo
+  const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("Environment variables:", { GOOGLE_CLIENT_ID, GOOGLE_API_KEY, API_URL });
-
     const loadGoogleApiScript = () => {
       if (!document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
         const script = document.createElement("script");
@@ -103,7 +85,6 @@ export default function Dropbox() {
         };
         document.body.appendChild(script);
       } else {
-        console.log("Google API script already present");
         initializeGoogleApi();
       }
     };
@@ -191,7 +172,7 @@ export default function Dropbox() {
 
   const handleDropboxUpload = () => {
     if (!window.Dropbox) {
-      setErrorMessage("Dropbox SDK not loaded. Please ensure the Dropbox script is included.");
+      setErrorMessage("Dropbox SDK not loaded.");
       return;
     }
     window.Dropbox.choose({
@@ -359,13 +340,13 @@ export default function Dropbox() {
 
   const formatOptions: FormatOptions = {
     image: {
-      image: ["BMP", "EPS", "GIF", "ICO", "JPG", "PNG", "SVG", "TGA", "TIFF", "WBMP", "WEBP"],
-      compressor: ["JPG", "PNG", "SVG"],
-      pdf: ["PDF"],
+      image: ["BMP", "EPS", "GIF", "ICO", "JPG", "SVG", "TGA", "TIFF", "WBMP", "WEBP"],
+      compressor: ["JPG Image Compress", "PNG Image Compress", "SVG Image Compress"],
+      pdf: ["IMAGES TO PDF"],
     },
     pdfs: {
       document: ["DOC", "DOCX", "HTML", "ODT", "PPT", "PPTX", "RTF", "TXT", "XLSX", "PDF"],
-      compressor: ["PDF"],
+      compressor: ["PDF Document Compress"],
       ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
       pdf_ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
       pdf_to_image: ["JPG", "PNG", "GIF"],
@@ -377,7 +358,7 @@ export default function Dropbox() {
       audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "MP3", "OGG", "OPUS", "WAV", "WMA", "3G2"],
       device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
       video: ["3G2", "3GP", "AVI", "FLV", "MKV", "MOV", "MPG", "OGV", "WEBM", "WMV"],
-      compressor: ["MP4"],
+      compressor: ["MP4 Video Compress"],
       webservice: ["DAILYMOTION", "FACEBOOK", "INSTAGRAM", "TELEGRAM", "TWITCH", "TWITTER", "VIBER", "VIMEO", "WHATSAPP", "YOUTUBE"],
     },
     document: ["DOCX", "PDF", "TXT", "RTF", "ODT"],
@@ -436,7 +417,7 @@ export default function Dropbox() {
       const [subSection, target] = item.selectedFormat.split(':');
       return {
         name: item.file.name,
-        target: target.toLowerCase(),
+        target: target.toLowerCase().replace(' image compress', '').replace(' document compress', '').replace(' video compress', ''),
         type: item.section,
         subSection,
         id: item.id,
@@ -456,7 +437,7 @@ export default function Dropbox() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort(new Error("Conversion request timed out after 120 seconds"));
-      }, 120000);
+      }, 120000); // Increased to 120 seconds
 
       const res = await fetch(`${API_URL}/api/convert`, {
         method: "POST",
@@ -537,142 +518,140 @@ export default function Dropbox() {
   };
 
   return (
-    <ErrorBoundary>
-      <div className="">
-        <div className="flex items-center justify-center">
-          <div className="flex flex-col items-center justify-center space-y-2 converter-wrapper p-12 m-4 rounded-md bg-white shadow-lg w-full max-w-3xlflex flex-col items-center justify-center space-y-2 converter-wrapper tall p-12 m-4 rounded-md">
-            <div className="bg-red-500 text-white gap-4 rounded-md px-8 py-6 flex items-center space-x-6 shadow-md w-[50%] justify-center">
-              <span className="font-semibold text-[15px]">Choose Files</span>
-              <FaFolderOpen
-                onClick={handleLocalFileClick}
-                title="Upload from device"
-                className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleLocalFileChange}
-                style={{ display: "none" }}
-                accept=".mp3,.wav,.aac,.flac,.ogg,.opus,.wma,.aiff,.m4v,.mmf,.3g2,.mp4,.avi,.mov,.webm,.mkv,.flv,.wmv,.3gp,.mpg,.ogv,.png,.jpg,.jpeg,.webp,.svg,.bmp,.gif,.ico,.tga,.tiff,.wbmp,.pdf,.doc,.docx,.txt,.rtf,.odt,.html,.ppt,.pptx,.xlsx,.zip,.7z,.epub,.mobi,.azw3,.fb2,.lit,.lrf,.pdb,.tcr"
-              />
-              <FaDropbox
-                onClick={handleDropboxUpload}
-                title="Upload from Dropbox"
-                className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
-              />
-              <FaGoogleDrive
-                onClick={handleGoogleDriveUpload}
-                title="Upload from Google Drive"
-                className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
-              />
+    <div>
+      <div className="flex items-center justify-center">
+        <div className="flex flex-col items-center justify-center space-y-2 converter-wrapper tall p-12 m-4 rounded-md">
+          <div className="bg-red-500 text-white relative gap-4 rounded-md px-8 py-6 flex items-center space-x-6 shadow-md w-[50%] justify-center">
+            <span className="font-semibold text-[15px]">Choose Files</span>
+            <FaFolderOpen
+              onClick={handleLocalFileClick}
+              title="Upload from device"
+              className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleLocalFileChange}
+              style={{ display: "none" }}
+              accept=".mp3,.wav,.aac,.flac,.ogg,.opus,.wma,.aiff,.m4v,.mmf,.3g2,.mp4,.avi,.mov,.webm,.mkv,.flv,.wmv,.3gp,.mpg,.ogv,.png,.jpg,.jpeg,.webp,.svg,.bmp,.gif,.ico,.tga,.tiff,.wbmp,.pdf,.doc,.docx,.txt,.rtf,.odt,.html,.ppt,.pptx,.xlsx,.zip,.7z,.epub,.mobi,.azw3,.fb2,.lit,.lrf,.pdb,.tcr"
+            />
+            <FaDropbox
+              onClick={handleDropboxUpload}
+              title="Upload from Dropbox"
+              className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
+            />
+            <FaGoogleDrive
+              onClick={handleGoogleDriveUpload}
+              title="Upload from Google Drive"
+              className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
+            />
+          </div>
+          <div className="dropboxfoot mt-5 text-sm text-gray-400">
+            100 MB maximum file size and up to 5 files.
+          </div>
+          {errorMessage && (
+            <div className="mt-4 text-red-500 text-sm font-medium">
+              {errorMessage}
             </div>
-            <div className="dropboxfoot mt-5 text-sm text-gray-400">
-              100 MB maximum file size and up to 5 files.
-            </div>
-            {errorMessage && (
-              <div className="mt-4 text-red-500 text-sm font-medium">
-                {errorMessage}
-              </div>
-            )}
-            <div className="mt-6 w-full max-w-2xl space-y-3">
-              {selectedFiles.map((item, index) => {
-                const convertedFile = convertedFiles.find(file => file.originalId === item.id);
-                console.log(`Checking match for ${item.file.name} (ID: ${item.id}):`, convertedFile ? convertedFile.name : 'No match');
-                return (
-                  <div
-                    key={item.id}
-                    className="relative bg-white text-gray-700 rounded-md px-4 py-3 shadow-md border"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <span className="text-xl">📄</span>
-                        <p className="truncate max-w-[160px] text-sm font-medium">
-                          {item.file.name}
-                        </p>
-                        <span className="text-sm text-gray-400">to</span>
-                        <button
-                          className="bg-gray-200 hover:bg-gray-300 text-sm rounded-md px-2 py-1"
-                          onClick={() => toggleMenu(index)}
-                        >
-                          {item.selectedFormat.split(':')[1] || "Select format"}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {convertedFile && (
-                          <button
-                            onClick={() =>
-                              handleDownload(
-                                convertedFile.url,
-                                convertedFile.name,
-                                convertedFiles.findIndex(file => file.originalId === item.id)
-                              )
-                            }
-                            disabled={convertedFile.loading}
-                            className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-1 rounded-md text-[14px] font-semibold hover:bg-yellow-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <FiDownload className="text-[16px]" />
-                            {convertedFile.loading ? "Downloading..." : "Download"}
-                          </button>
-                        )}
-                        <button
-                          className="text-gray-400 hover:text-red-500 transition text-xl"
-                          onClick={() => removeFile(index)}
-                        >
-                          ×
-                        </button>
-                      </div>
+          )}
+          <div className="mt-6 w-full max-w-2xl space-y-3">
+            {selectedFiles.map((item, index) => {
+              const convertedFile = convertedFiles.find(file => file.originalId === item.id);
+              console.log(`Checking match for ${item.file.name} (ID: ${item.id}):`, convertedFile ? convertedFile.name : 'No match');
+              return (
+                <div
+                  key={item.id}
+                  className="relative bg-white text-gray-700 rounded-md px-4 py-3 shadow-md border"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <span className="text-xl">📄</span>
+                      <p className="truncate max-w-[160px] text-sm font-medium">
+                        {item.file.name}
+                      </p>
+                      <span className="text-sm text-gray-400">to</span>
+                      <button
+                        className="bg-gray-200 hover:bg-gray-300 text-sm rounded-md px-2 py-1"
+                        onClick={() => toggleMenu(index)}
+                      >
+                        {item.selectedFormat.split(':')[1] || "Select format"}
+                      </button>
                     </div>
-                    {item.showMenu && (
-                      <div className="absolute top-full mt-2 right-12 bg-[#1f1f1f] text-white rounded-md p-4 w-[340px] shadow-xl text-sm font-medium z-50 flex">
-                        <div className="flex flex-col border-r border-gray-700 pr-3 min-w-[100px]">
-                          {Object.keys(formatOptions[item.section]).map((subSection) => (
+                    <div className="flex items-center gap-2">
+                      {convertedFile && (
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              convertedFile.url,
+                              convertedFile.name,
+                              convertedFiles.findIndex(file => file.originalId === item.id)
+                            )
+                          }
+                          disabled={convertedFile.loading}
+                          className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-1 rounded-md text-[14px] font-semibold hover:bg-yellow-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <FiDownload className="text-[16px]" />
+                          {convertedFile.loading ? "Downloading..." : "Download"}
+                        </button>
+                      )}
+                      <button
+                        className="text-gray-400 hover:text-red-500 transition text-xl"
+                        onClick={() => removeFile(index)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                  {item.showMenu && (
+                    <div className="absolute top-full mt-2 right-12 bg-[#1f1f1f] text-white rounded-md p-4 w-[340px] shadow-xl text-sm font-medium z-50 flex">
+                      <div className="flex flex-col border-r border-gray-700 pr-3 min-w-[100px]">
+                        {Object.keys(formatOptions[item.section]).map((subSection) => (
+                          <button
+                            key={subSection}
+                            className={`text-left px-2 py-1 rounded hover:bg-[#333] ${
+                              item.selectedSubSection === subSection ? "text-white font-bold" : "text-gray-400"
+                            }`}
+                            onClick={() => selectSubSection(index, subSection)}
+                          >
+                            {subSection.charAt(0).toUpperCase() + subSection.slice(1).replace('_', ' ')}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex-1 pl-4">
+                        <div className="grid grid-cols-2 gap-2">
+                          {formatOptions[item.section][item.selectedSubSection || Object.keys(formatOptions[item.section])[0]].map((format) => (
                             <button
-                              key={subSection}
-                              className={`text-left px-2 py-1 rounded hover:bg-[#333] ${
-                                item.selectedSubSection === subSection ? "text-white font-bold" : "text-gray-400"
-                              }`}
-                              onClick={() => selectSubSection(index, subSection)}
+                              key={format}
+                              className="bg-[#333] hover:bg-red-600 transition px-3 py-2 rounded text-white text-xs"
+                              onClick={() => selectFormat(index, format, item.selectedSubSection || Object.keys(formatOptions[item.section])[0])}
                             >
-                              {subSection.charAt(0).toUpperCase() + subSection.slice(1).replace('_', ' ')}
+                              {format}
                             </button>
                           ))}
                         </div>
-                        <div className="flex-1 pl-4">
-                          <div className="grid grid-cols-2 gap-2">
-                            {formatOptions[item.section][item.selectedSubSection || Object.keys(formatOptions[item.section])[0]].map((format) => (
-                              <button
-                                key={format}
-                                className="bg-[#333] hover:bg-red-600 transition px-3 py-2 rounded text-white text-xs"
-                                onClick={() => selectFormat(index, format, item.selectedSubSection || Object.keys(formatOptions[item.section])[0])}
-                              >
-                                {format}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center space-y-2 rounded-md">
-          <h1 className="text-gray-500 text-center mt-4">
-            Make sure you have uploaded valid files otherwise conversion will not be correct
-          </h1>
-          <button
-            onClick={handleConvert}
-            disabled={isConverting || selectedFiles.length === 0}
-            className={`flex items-center gap-2 bg-red-400 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-red-500 transition ${isConverting || selectedFiles.length === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
-          >
-            <FiArrowRight className="text-[16px]" />
-            {isConverting ? "Converting..." : "Convert files"}
-          </button>
-        </div>
       </div>
-    </ErrorBoundary>
+      <div className="flex flex-col items-center justify-center space-y-2 rounded-md">
+        <h1 className="text-gray-500 text-center mt-4">
+          Make sure you have uploaded valid files otherwise conversion will not be correct
+        </h1>
+        <button
+          onClick={handleConvert}
+          disabled={isConverting || selectedFiles.length === 0}
+          className={`flex items-center gap-2 bg-red-400 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-red-500 transition ${isConverting || selectedFiles.length === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          <FiArrowRight className="text-[16px]" />
+          {isConverting ? "Converting..." : "Convert files"}
+        </button>
+      </div>
+    </div>
   );
-}
+} 
