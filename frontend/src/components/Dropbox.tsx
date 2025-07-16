@@ -538,9 +538,9 @@ export default function Dropbox() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen">
+      <div className="">
         <div className="flex items-center justify-center">
-          <div className="flex flex-col items-center justify-center space-y-2 converter-wrapper p-12 m-4 rounded-md bg-white shadow-lg w-full max-w-3xl">
+          <div className="flex flex-col items-center justify-center space-y-2 converter-wrapper p-12 m-4 rounded-md bg-white shadow-lg w-full max-w-3xlflex flex-col items-center justify-center space-y-2 converter-wrapper tall p-12 m-4 rounded-md">
             <div className="bg-red-500 text-white gap-4 rounded-md px-8 py-6 flex items-center space-x-6 shadow-md w-[50%] justify-center">
               <span className="font-semibold text-[15px]">Choose Files</span>
               <FaFolderOpen
