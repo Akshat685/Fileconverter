@@ -206,25 +206,25 @@ export default function Dropbox() {
 
   // Create Google Picker
   const createGooglePicker = (token: string) => {
-    if (pickerLoaded.current && window.google?.picker && typeof window.google.picker.PickerBuilder === "function") {
-      try {
-        const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
-        const picker = new window.google.picker.PickerBuilder()
-          .addView(view)
-          .setOAuthToken(token)
-          .setDeveloperKey(GOOGLE_API_KEY)
-          .setOrigin("http://localhost:5173")
-          .setCallback((data: any) => handlePickerResponse(data, token))
-          .build();
-        picker.setVisible(true);
-      } catch (err) {
-        console.error("Failed to create Google Picker:", err);
-        setErrorMessage("Failed to initialize Google Picker. Please try again.");
-      }
-    } else {
-      setErrorMessage("Google Picker API not loaded. Please try again.");
+  if (pickerLoaded.current && window.google?.picker && typeof window.google.picker.PickerBuilder === "function") {
+    try {
+      const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
+      const picker = new window.google.picker.PickerBuilder()
+        .addView(view)
+        .setOAuthToken(token)
+        .setDeveloperKey(GOOGLE_API_KEY)
+        .setOrigin(window.location.origin) // Use dynamic origin
+        .setCallback((data: any) => handlePickerResponse(data, token))
+        .build();
+      picker.setVisible(true);
+    } catch (err) {
+      console.error("Failed to create Google Picker:", err);
+      setErrorMessage("Failed to initialize Google Picker. Please try again.");
     }
-  };
+  } else {
+    setErrorMessage("Google Picker API not loaded. Please try again.");
+  }
+};
 
   // Handle Google Picker response
   const handlePickerResponse = async (data: any, token: string) => {
