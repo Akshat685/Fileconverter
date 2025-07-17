@@ -12,7 +12,7 @@ const libre = require('libreoffice-convert');
 const { fromPath } = require('pdf2pic');
 const tmp = require('tmp');
 const app = express();
-// const port = process.env.PORT || 5000;
+const port = process.env.PORT || 5000;
 // Configure CORS
 app.use(cors());
 // All supported formats
