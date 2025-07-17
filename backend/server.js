@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
@@ -10,71 +11,34 @@ const cors = require('cors');
 const libre = require('libreoffice-convert');
 const { fromPath } = require('pdf2pic');
 const tmp = require('tmp');
-const { exec } = require('child_process');
-
 const app = express();
-const port = process.env.PORT || 5000;
-
-function execPromise(cmd) {
-  return new Promise((resolve, reject) => {
-    exec(cmd, (err, stdout, stderr) => {
-      if (err) {
-        console.error(`ImageMagick error: ${stderr}`);
-        return reject(err);
-      }
-      resolve(stdout);
-    });
-  });
-}
-
+// const port = process.env.PORT || 5000;
+// Configure CORS
 app.use(cors());
-
+// All supported formats
 const allFormats = [
   'bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg',
-  'pdf', 'doc', 'docx', 'html', 'odt', 'ppt', 'pptx', 'rtf', 'txt', 'xlsx',
-  'mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'm4v', 'mmf', '3g2',
-  'mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv', '3gp', 'mpg', 'ogv',
+  'pdf', 'docx', 'txt', 'rtf', 'odt',
+  'mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma',
+  'mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv',
   'zip', '7z',
-  'epub', 'mobi', 'azw3', 'fb2', 'lit', 'lrf', 'pdb', 'tcr',
+  'epub', 'mobi', 'azw3'
 ];
-
+// Supported formats for each conversion type
 const supportedFormats = {
-   image: {
-    raster: ['jpeg','jpg','png','webp','tiff','gif'],
-    vector: ['svg','bmp','ico','eps','tga','wbmp'],
-    compressor: ['jpg','png'],
-    pdf: ['pdf'],
-  },
-  pdfs: {
-    document: ['doc', 'docx', 'html', 'odt', 'ppt', 'pptx', 'rtf', 'txt', 'xlsx', 'pdf'],
-    compressor: ['pdf'],
-    ebook: ['azw3', 'epub', 'fb2', 'lit', 'lrf', 'mobi', 'pdb', 'tcr'],
-    pdf_ebook: ['azw3', 'epub', 'fb2', 'lit', 'lrf', 'mobi', 'pdb', 'tcr'],
-    pdf_to_image: ['jpg', 'png', 'gif'],
-  },
-  audio: {
-    audio: ['aac', 'aiff', 'flac', 'm4v', 'mmf', 'ogg', 'opus', 'wav', 'wma', '3g2'],
-  },
-  video: {
-    audio: ['aac', 'aiff', 'flac', 'm4v', 'mmf', 'mp3', 'ogg', 'opus', 'wav', 'wma', '3g2'],
-    device: ['android', 'blackberry', 'ipad', 'iphone', 'ipod', 'playstation', 'psp', 'wii', 'xbox'],
-    video: ['3g2', '3gp', 'avi', 'flv', 'mkv', 'mov', 'mpg', 'ogv', 'webm', 'wmv'],
-    compressor: ['mp4'],
-    webservice: ['dailymotion', 'facebook', 'instagram', 'telegram', 'twitch', 'twitter', 'viber', 'vimeo', 'whatsapp', 'youtube'],
-  },
-  document: ['docx', 'pdf', 'txt', 'rtf', 'odt'],
-  archive: ['zip', '7z'],
-  ebook: ['epub', 'mobi', 'pdf', 'azw3'],
+  image: allFormats,
+  compressor: ['jpg', 'png', 'svg'],
+  pdfs: allFormats,
+  audio: allFormats,
+  video: allFormats,
+  document: allFormats,
+  archive: allFormats,
+  ebook: allFormats,
 };
-
-const uploadsDir = path.join(__dirname, 'uploads');
-const convertedDir = path.join(__dirname, 'converted');
-fsPromises.mkdir(uploadsDir, { recursive: true });
-fsPromises.mkdir(convertedDir, { recursive: true });
-
+// Configure multer
 const upload = multer({
   dest: 'uploads/',
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
   fileFilter: (req, file, cb) => {
     const allowedExtensions = allFormats.map(ext => `.${ext}`);
     const ext = path.extname(file.originalname).toLowerCase();
@@ -85,98 +49,88 @@ const upload = multer({
     }
   },
 });
-
+// Ensure directories exist
+const uploadsDir = path.join(__dirname, 'uploads');
+const convertedDir = path.join(__dirname, 'converted');
+fsPromises.mkdir(uploadsDir, { recursive: true });
+fsPromises.mkdir(convertedDir, { recursive: true });
+// Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-  });
+  res.status(200).json({ status: 'OK' });
 });
-
+// Conversion route
 app.post('/api/convert', upload.array('files', 5), async (req, res) => {
-  console.log('Received /api/convert request with files:', req.files?.map(f => f.originalname));
+  console.log('Received /api/convert request');
   let tempFiles = req.files ? req.files.map(f => f.path) : [];
   try {
     const files = req.files;
     let formats;
-
     try {
       formats = JSON.parse(req.body.formats || '[]');
-      console.log('Parsed formats:', formats);
     } catch (parseError) {
       console.error('Error parsing formats:', parseError);
       return res.status(400).json({ error: 'Invalid formats data. Please provide valid JSON.' });
     }
-
     if (!files || files.length === 0) {
       console.error('No files uploaded');
       return res.status(400).json({ error: 'No files uploaded.' });
     }
-
     if (files.length > 5) {
       console.error('Too many files uploaded');
       return res.status(400).json({ error: 'Maximum 5 files allowed.' });
     }
-
     if (files.length !== formats.length) {
       console.error(`Mismatch between files (${files.length}) and formats (${formats.length})`);
       return res.status(400).json({
         error: `Mismatch between files and formats. Files: ${files.length}, Formats: ${formats.length}`,
       });
     }
-
     const outputFiles = [];
-
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const formatInfo = formats[i];
       const inputExt = path.extname(file.originalname).toLowerCase().slice(1) || 'unknown';
-      const outputExt = formatInfo.target.toLowerCase();
-      const subSection = formatInfo.subSection;
-
-      console.log(`Processing file: ${file.originalname}, type: ${formatInfo.type}, subSection: ${subSection}, inputExt: ${inputExt}, target: ${outputExt}`);
-
+      const outputExt = formatInfo.target.toLowerCase().split(' ')[0];
+      console.log(`Processing file: ${file.originalname}, type: ${formatInfo.type}, inputExt: ${inputExt}, target: ${outputExt}`);
       if (!Object.keys(supportedFormats).includes(formatInfo.type)) {
         throw new Error(`Unsupported conversion type: ${formatInfo.type}. Supported types: ${Object.keys(supportedFormats).join(', ')}`);
       }
-
-      if (!supportedFormats[formatInfo.type][subSection]?.includes(outputExt)) {
-        throw new Error(`Unsupported output format: ${outputExt} for type ${formatInfo.type}.${subSection}. Supported formats: ${supportedFormats[formatInfo.type][subSection]?.join(', ')}`);
+      if (!supportedFormats[formatInfo.type].includes(outputExt)) {
+        throw new Error(`Unsupported output format: ${outputExt} for type ${formatInfo.type}. Supported formats: ${supportedFormats[formatInfo.type].join(', ')}`);
       }
-
       if (!allFormats.includes(inputExt)) {
         throw new Error(`Unsupported input format: ${inputExt}. Supported formats: ${allFormats.join(', ')}`);
       }
-
       const inputPath = file.path;
       const outputPath = path.join(
         convertedDir,
         `${path.basename(file.filename, path.extname(file.filename))}_${Date.now()}.${outputExt}`
       );
-
       try {
         await fsPromises.access(inputPath);
       } catch {
         throw new Error(`Input file not found: ${file.originalname}`);
       }
-
-      switch (formatInfo.type) {
+      const outputType = ['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'].includes(outputExt) ? 'image' :
+        ['pdf', 'docx', 'txt', 'rtf', 'odt'].includes(outputExt) ? 'document' :
+          ['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma'].includes(outputExt) ? 'audio' :
+            ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv'].includes(outputExt) ? 'video' :
+              ['zip', '7z'].includes(outputExt) ? 'archive' :
+                ['epub', 'mobi', 'azw3'].includes(outputExt) ? 'ebook' : formatInfo.type;
+      switch (outputType) {
         case 'image':
-          await convertImage(inputPath, outputPath, outputExt, subSection);
-          break;
-        case 'pdfs':
-          await convertPdf(inputPath, outputPath, outputExt, subSection);
-          break;
-        case 'audio':
-          await convertAudio(inputPath, outputPath, outputExt);
-          break;
-        case 'video':
-          await convertVideo(inputPath, outputPath, outputExt, subSection);
+        case 'compressor':
+          await convertImage(inputPath, outputPath, outputExt);
           break;
         case 'document':
           await convertDocument(inputPath, outputPath, outputExt);
+          break;
+        case 'pdfs':
+          await convertPdf(inputPath, outputPath, outputExt);
+          break;
+        case 'audio':
+        case 'video':
+          await convertMedia(inputPath, outputPath, outputExt);
           break;
         case 'archive':
           await convertArchive(inputPath, outputPath, outputExt);
@@ -185,16 +139,14 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
           await convertEbook(inputPath, outputPath, outputExt);
           break;
         default:
-          throw new Error(`Unsupported conversion type: ${formatInfo.type}`);
+          throw new Error(`Unsupported conversion type: ${outputType}`);
       }
-
       outputFiles.push({
         path: outputPath,
         name: path.basename(outputPath),
       });
-      tempFiles.push(outputPath);
+      tempFiles.push(outputPath); // Track output files
     }
-
     res.json({
       files: outputFiles.map(file => ({
         name: file.name,
@@ -202,17 +154,17 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       })),
     });
   } catch (error) {
-    console.error('Conversion error:', error.message, error.stack);
+    console.error('Conversion error:', error.message);
     res.status(500).json({ error: error.message || 'Conversion failed.' });
   } finally {
+    // Cleanup only input files (uploads), keep converted files
     await cleanupFiles(tempFiles.filter(file => file.startsWith(uploadsDir)));
   }
 });
-
+// Serve converted files and delete after download
 app.get('/converted/:filename', async (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(convertedDir, filename);
-
   console.log(`Serving file: ${filePath}`);
   try {
     await fsPromises.access(filePath);
@@ -222,6 +174,7 @@ app.get('/converted/:filename', async (req, res) => {
         res.status(500).json({ error: 'Failed to send converted file.' });
       } else {
         console.log(`File sent successfully: ${filePath}`);
+        // Delete the file after successful download
         await cleanupFiles([filePath]);
       }
     });
@@ -230,11 +183,10 @@ app.get('/converted/:filename', async (req, res) => {
     res.status(404).json({ error: 'Converted file not found.' });
   }
 });
-
+// New endpoint to manually delete a file
 app.delete('/api/delete/:filename', async (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(convertedDir, filename);
-
   try {
     await cleanupFiles([filePath]);
     res.status(200).json({ message: `File ${filename} deleted successfully.` });
@@ -243,86 +195,166 @@ app.delete('/api/delete/:filename', async (req, res) => {
     res.status(500).json({ error: `Failed to delete file ${filename}.` });
   }
 });
-
-async function convertImage(inputPath, outputPath, format, subSection) {
-  const inputExt = path.extname(inputPath).slice(1).toLowerCase();
-  format = format.toLowerCase(); // Normalize
-
-  if (subSection === 'compressor') {
-    if (['jpg', 'jpeg'].includes(format)) {
-      return sharp(inputPath).jpeg({ quality: 50 }).toFile(outputPath);
-    } else if (format === 'png') {
-      return sharp(inputPath).png({ compressionLevel: 9 }).toFile(outputPath);
+// Conversion functions
+async function convertImage(inputPath, outputPath, format) {
+  const imageFormats = ['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'];
+  const inputExt = path.extname(inputPath).toLowerCase().slice(1);
+  if (!imageFormats.includes(inputExt) && ['pdf', 'docx', 'txt', 'rtf', 'odt'].includes(inputExt)) {
+    const tempPdfPath = path.join(convertedDir, `temp_${Date.now()}.pdf`);
+    try {
+      await convertDocument(inputPath, tempPdfPath, 'pdf');
+      await convertImage(tempPdfPath, outputPath, format);
+      await fsPromises.unlink(tempPdfPath).catch(err => console.error(`Error cleaning up temp PDF: ${err.message}`));
+    } catch (err) {
+      console.error(`Image conversion preprocessing failed: ${err.message}`);
+      throw err;
     }
-    throw new Error(`Unsupported compressor format: ${format}`);
+    return;
   }
-
-  if (subSection === 'pdf') {
-    return sharp(inputPath).toFormat('pdf').toFile(outputPath);
-  }
-
-  // Use ImageMagick for any format sharp doesn't support
-  const useImageMagick = ['bmp', 'ico', 'svg', 'eps', 'tga', 'wbmp'].includes(format);
-
-  if (useImageMagick) {
-    return execPromise(`magick convert "${inputPath}" "${outputPath}"`);
-  }
-
-  // Use sharp for all supported raster image conversions
-  try {
-    return sharp(inputPath).toFormat(format).toFile(outputPath);
-  } catch (err) {
-    console.warn(`Sharp failed for format ${format}. Falling back to ImageMagick...`);
-    return execPromise(`magick convert "${inputPath}" "${outputPath}"`);
+  if (imageFormats.includes(format)) {
+    await sharp(inputPath)
+      .toFormat(format)
+      .toFile(outputPath);
+    console.log(`Image conversion completed: ${outputPath}`);
+  } else if (format === 'pdf' || format === 'docx') {
+    let tempPdfPath;
+    try {
+      if (format === 'pdf') {
+        tempPdfPath = outputPath;
+      } else {
+        tempPdfPath = path.join(convertedDir, `temp_${Date.now()}.pdf`);
+      }
+      const imageBuffer = await fsPromises.readFile(inputPath);
+      await new Promise((resolve, reject) => {
+        libre.soffice = 'C:\\Program Files\\LibreOffice\\program\\soffice.exe'; // Adjust if needed
+        tmp.dir({ unsafeCleanup: true }, (err, tempDir, cleanupCallback) => {
+          if (err) return reject(new Error(`Failed to create temporary directory: ${err.message}`));
+          libre.convert(imageBuffer, '.pdf', { tmpDir: tempDir }, (err, pdfBuffer) => {
+            if (err) {
+              cleanupCallback();
+              return reject(new Error(`Image to PDF conversion failed: ${err.message}`));
+            }
+            fsPromises.writeFile(tempPdfPath, pdfBuffer)
+              .then(() => {
+                cleanupCallback();
+                resolve();
+              })
+              .catch((writeErr) => {
+                cleanupCallback();
+                reject(writeErr);
+              });
+          });
+        });
+      });
+      if (format === 'docx') {
+        const pdfBuffer = await fsPromises.readFile(tempPdfPath);
+        await new Promise((resolve, reject) => {
+          libre.soffice = 'C:\\Program Files\\LibreOffice\\program\\soffice.exe'; // Adjust if needed
+          tmp.dir({ unsafeCleanup: true }, (err, tempDir, cleanupCallback) => {
+            if (err) return reject(new Error(`Failed to create temporary directory: ${err.message}`));
+            libre.convert(pdfBuffer, '.docx', { tmpDir: tempDir }, (err, docxBuffer) => {
+              if (err) {
+                cleanupCallback();
+                return reject(new Error(`PDF to DOCX conversion failed: ${err.message}`));
+              }
+              fsPromises.writeFile(outputPath, docxBuffer)
+                .then(() => {
+                  cleanupCallback();
+                  resolve();
+                })
+                .catch((writeErr) => {
+                  cleanupCallback();
+                  reject(writeErr);
+                });
+            });
+          });
+        });
+        await fsPromises.unlink(tempPdfPath).catch(err => console.error(`Error cleaning up temp PDF: ${err.message}`));
+      }
+      console.log(`Image conversion to ${format} completed: ${outputPath}`);
+    } catch (err) {
+      if (tempPdfPath && format === 'docx') {
+        await fsPromises.unlink(tempPdfPath).catch(err => console.error(`Error cleaning up temp PDF: ${err.message}`));
+      }
+      throw err;
+    }
+  } else {
+    throw new Error(`Unsupported image output format: ${format}`);
   }
 }
-
-
-
-
-
-async function convertPdf(inputPath, outputPath, format, subSection) {
-  if (subSection == 'compressor') {
-    // compress PDF via Ghostscript
-    return execPromise(`gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 \
-   -dPDFSETTINGS=/ebook -dNOPAUSE -dBATCH \
-   -sOutputFile="${outputPath}" "${inputPath}"`);
+async function convertPdf(inputPath, outputPath, format) {
+  const inputExt = path.extname(inputPath).toLowerCase().slice(1);
+  if (inputExt !== 'pdf') {
+    const tempPdfPath = path.join(convertedDir, `temp_${Date.now()}.pdf`);
+    try {
+      await convertDocument(inputPath, tempPdfPath, 'pdf');
+      await convertPdf(tempPdfPath, outputPath, format);
+      await fsPromises.unlink(tempPdfPath).catch(err => console.error(`Error cleaning up temp PDF: ${err.message}`));
+    } catch (err) {
+      console.error(`PDF conversion preprocessing failed: ${err.message}`);
+      throw err;
+    }
+    return;
   }
-
-  if (subSection == 'pdf_to_image') {
-    const converter = fromPath(inputPath,{format,width:600,height:600,saveFilename:path.parse(outputPath).name,savePath:path.dirname(outputPath)});
-    return converter(1); // first page
-  }
-
-  if (['document','ebook','pdf_ebook'].includes(subSection)) {
-    const buffer = await fsPromises.readFile(inputPath);
-    return new Promise((resolve, reject)=>{
-      tmp.dir({unsafeCleanup:true},(err,tmpPath,cleanup)=>{
-        if(err) return reject(err);
-        libre.convert(buffer,'.'+format,{tmpDir:tmpPath},(e,buf)=>{
-          cleanup();
-          if(e) return reject(e);
-          fsPromises.writeFile(outputPath,buf).then(resolve).catch(reject);
+  if (['jpg', 'png', 'gif'].includes(format)) {
+    const outputOptions = {
+      density: 100,
+      format: format,
+      width: 600,
+      height: 600,
+    };
+    const convert = fromPath(inputPath, outputOptions);
+    await convert.bulk(-1, { outputPath });
+    console.log(`PDF to ${format} conversion completed: ${outputPath}`);
+  } else if (format === 'docx') {
+    const pdfBuffer = await fsPromises.readFile(inputPath);
+    await new Promise((resolve, reject) => {
+      libre.soffice = 'C:\\Program Files\\LibreOffice\\program\\soffice.exe'; // Adjust if needed
+      tmp.dir({ unsafeCleanup: true }, (err, tempDir, cleanupCallback) => {
+        if (err) return reject(new Error(`Failed to create temporary directory: ${err.message}`));
+        libre.convert(pdfBuffer, '.docx', { tmpDir: tempDir }, (err, docxBuffer) => {
+          if (err) {
+            cleanupCallback();
+            return reject(new Error(`PDF to DOCX conversion failed: ${err.message}`));
+          }
+          fsPromises.writeFile(outputPath, docxBuffer)
+            .then(() => {
+              cleanupCallback();
+              resolve();
+            })
+            .catch((writeErr) => {
+              cleanupCallback();
+              reject(writeErr);
+            });
         });
       });
     });
+    console.log(`PDF to DOCX conversion completed: ${outputPath}`);
+  } else {
+    throw new Error(`Unsupported PDF output format: ${format}`);
   }
-
-  throw new Error(`Unsupported PDF subsection: ${subSection}`);
 }
-
-
 async function convertDocument(inputPath, outputPath, format) {
-  const supportedDocumentFormats = ['doc', 'docx', 'html', 'odt', 'ppt', 'pptx', 'rtf', 'txt', 'xlsx', 'pdf'];
   const inputExt = path.extname(inputPath).toLowerCase().slice(1);
-
+  const supportedDocumentFormats = ['docx', 'pdf', 'txt', 'rtf', 'odt'];
+  if (['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'].includes(inputExt)) {
+    const tempPdfPath = path.join(convertedDir, `temp_${Date.now()}.pdf`);
+    try {
+      await convertImage(inputPath, tempPdfPath, 'pdf');
+      await convertDocument(tempPdfPath, outputPath, format);
+      await fsPromises.unlink(tempPdfPath).catch(err => console.error(`Error cleaning up temp PDF: ${err.message}`));
+    } catch (err) {
+      console.error(`Document conversion preprocessing failed: ${err.message}`);
+      throw err;
+    }
+    return;
+  }
   if (!supportedDocumentFormats.includes(format)) {
     throw new Error(`Unsupported output document format: ${format}`);
   }
-
   const buffer = await fsPromises.readFile(inputPath);
   await new Promise((resolve, reject) => {
-    libre.soffice = process.env.LIBREOFFICE_PATH || 'C:\\Program Files\\LibreOffice\\program\\soffice.exe';
+    libre.soffice = 'C:\\Program Files\\LibreOffice\\program\\soffice.exe'; // Adjust if needed
     tmp.dir({ unsafeCleanup: true }, (err, tempDir, cleanupCallback) => {
       if (err) return reject(new Error(`Failed to create temporary directory: ${err.message}`));
       libre.convert(buffer, `.${format}`, { tmpDir: tempDir }, (err, convertedBuf) => {
@@ -344,127 +376,21 @@ async function convertDocument(inputPath, outputPath, format) {
   });
   console.log(`Document conversion completed: ${outputPath}`);
 }
-
-async function convertAudio(inputPath, outputPath, format) {
+async function convertMedia(inputPath, outputPath, format) {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
       .toFormat(format)
       .on('end', () => {
-        console.log(`Audio conversion completed: ${outputPath}`);
+        console.log(`Media conversion completed: ${outputPath}`);
         resolve();
       })
       .on('error', (err) => {
-        console.error(`Audio conversion error: ${err.message}`);
-        reject(new Error(`Audio conversion failed: ${err.message}`));
+        console.error(`Media conversion error: ${err.message}`);
+        reject(new Error(`Media conversion failed: ${err.message}`));
       })
       .save(outputPath);
   });
 }
-
-async function convertVideo(inputPath, outputPath, format, subSection) {
-  if (subSection === 'compressor') {
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoCodec('libx264')
-        .addOption('-crf', '28')
-        .toFormat('mp4')
-        .on('end', () => {
-          console.log(`Video compression completed: ${outputPath}`);
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error(`Video compression error: ${err.message}`);
-          reject(new Error(`Video compression failed: ${err.message}`));
-        })
-        .save(outputPath);
-    });
-  } else if (subSection === 'audio') {
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .noVideo()
-        .toFormat(format)
-        .on('end', () => {
-          console.log(`Video to audio conversion completed: ${outputPath}`);
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error(`Video to audio conversion error: ${err.message}`);
-          reject(new Error(`Video to audio conversion failed: ${err.message}`));
-        })
-        .save(outputPath);
-    });
-  } else if (subSection === 'device') {
-    const devicePresets = {
-      android: ['-vf', 'scale=1280:720', '-b:v', '2M'],
-      blackberry: ['-vf', 'scale=480:320', '-b:v', '1M'],
-      ipad: ['-vf', 'scale=1024:768', '-b:v', '3M'],
-      iphone: ['-vf', 'scale=960:540', '-b:v', '2M'],
-      ipod: ['-vf', 'scale=480:320', '-b:v', '1M'],
-      playstation: ['-vf', 'scale=1280:720', '-b:v', '3M'],
-      psp: ['-vf', 'scale=320:240', '-b:v', '500k'],
-      wii: ['-vf', 'scale=640:480', '-b:v', '1.5M'],
-      xbox: ['-vf', 'scale=1280:720', '-b:v', '3M'],
-    };
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoCodec('libx264')
-        .addOptions(devicePresets[format] || ['-vf', 'scale=1280:720', '-b:v', '2M'])
-        .toFormat('mp4')
-        .on('end', () => {
-          console.log(`Video device conversion completed: ${outputPath}`);
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error(`Video device conversion error: ${err.message}`);
-          reject(new Error(`Video device conversion failed: ${err.message}`));
-        })
-        .save(outputPath);
-    });
-  } else if (subSection === 'webservice') {
-    const webservicePresets = {
-      dailymotion: ['-vf', 'scale=1280:720', '-b:v', '2M'],
-      facebook: ['-vf', 'scale=1280:720', '-b:v', '2M'],
-      instagram: ['-vf', 'scale=1080:1080', '-b:v', '1.5M'],
-      telegram: ['-vf', 'scale=854:480', '-b:v', '1M'],
-      twitch: ['-vf', 'scale=1280:720', '-b:v', '3M'],
-      twitter: ['-vf', 'scale=1280:720', '-b:v', '1.5M'],
-      viber: ['-vf', 'scale=854:480', '-b:v', '1M'],
-      vimeo: ['-vf', 'scale=1280:720', '-b:v', '2M'],
-      whatsapp: ['-vf', 'scale=854:480', '-b:v', '1M'],
-      youtube: ['-vf', 'scale=1920:1080', '-b:v', '4M'],
-    };
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoCodec('libx264')
-        .addOptions(webservicePresets[format] || ['-vf', 'scale=1280:720', '-b:v', '2M'])
-        .toFormat('mp4')
-        .on('end', () => {
-          console.log(`Video webservice conversion completed: ${outputPath}`);
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error(`Video webservice conversion error: ${err.message}`);
-          reject(new Error(`Video webservice conversion failed: ${err.message}`));
-        })
-        .save(outputPath);
-    });
-  } else {
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .toFormat(format)
-        .on('end', () => {
-          console.log(`Video conversion completed: ${outputPath}`);
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error(`Video conversion error: ${err.message}`);
-          reject(new Error(`Video conversion failed: ${err.message}`));
-        })
-        .save(outputPath);
-    });
-  }
-}
-
 async function convertArchive(inputPath, outputPath, format) {
   const sevenZip = require('node-7z');
   if (format === 'zip' || format === '7z') {
@@ -483,12 +409,8 @@ async function convertArchive(inputPath, outputPath, format) {
     throw new Error(`Unsupported archive format: ${format}`);
   }
 }
-
 async function convertEbook(inputPath, outputPath, format) {
-  const supportedEbookFormats = ['epub', 'mobi', 'azw3', 'fb2', 'lit', 'lrf', 'pdb', 'tcr', 'pdf'];
-  if (!supportedEbookFormats.includes(format)) {
-    throw new Error(`Unsupported ebook format: ${format}`);
-  }
+  const { exec } = require('child_process');
   return new Promise((resolve, reject) => {
     exec(`ebook-convert "${inputPath}" "${outputPath}"`, (err) => {
       if (err) {
@@ -500,11 +422,9 @@ async function convertEbook(inputPath, outputPath, format) {
     });
   });
 }
-
 async function cleanupFiles(filePaths) {
   const maxRetries = 3;
-  const retryDelay = 1000;
-
+  const retryDelay = 1000; // 1 second
   for (const filePath of filePaths) {
     let attempts = 0;
     while (attempts < maxRetries) {
@@ -529,7 +449,7 @@ async function cleanupFiles(filePaths) {
     }
   }
 }
-
+// Start server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
-});
+}); 

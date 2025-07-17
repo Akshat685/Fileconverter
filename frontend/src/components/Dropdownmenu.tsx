@@ -44,12 +44,12 @@ const Dropdownmenu: React.FC<DropdownMenuProps> = ({ closeDropdown }) => {
   };
 
   return (
-    <div className="grid grid-cols-3 gap-y-4 w-full p-4">
+    <div className="grid grid-cols-3 gap-y-4 w-full p-4 ">
       {converters.map((item, index) => (
         <div
           key={index}
           onClick={() => handleNavigate(item.slug)}
-          className="flex items-center space-x-4 p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 cursor-pointer"
+          className="flex items-center space-x-4 p-2 hover:bg-gray-100  rounded-lg transition-colors duration-200 cursor-pointer"
         >
           <div className="w-12 h-12 flex items-center justify-center rounded-full bg-gray-50">
             {item.icon}

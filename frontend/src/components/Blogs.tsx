@@ -1,47 +1,84 @@
+// blogData.ts
 import convertImage from "../images/convert.png";
 
-const blogs = [
+export const blogs = [
   {
-    title: "Online Convert The Ultimate Free Online File Converter",
-    link: "#",
+    title: "Best Audio Conversion Tools",
+    type: "audio",
+    link: "",
     image: convertImage,
-    description:
-      "In today's digital age, file formats come in all shapes and sizes. Whether you're working...",
+    description: "Convert between MP3, AAC, OGG and more easily...",
   },
   {
-    title: "Convert your files to any format with Convertio",
-    link: "#",
+    title: "Video Format Guide",
+    type: "video",
+    link: "",
     image: convertImage,
-    description:
-      "In today’s fast-moving digital world, converting files from one format to another is a...",
+    description: "Everything you need to know about converting video formats...",
   },
   {
-    title: "File Converter | Convert & compress everything",
-    link: "#",
+    title: "Image Compression Tips",
+    type: "compressor",
+    link: "",
     image: convertImage,
-    description:
-      "In today’s fast-moving digital world, file formats often become a hurdle in work,...",
+    description: "Reduce image sizes with minimal quality loss...",
   },
   {
-    title: "All in one File Converter: Convert Images...",
-    link: "#",
+    title: "PDF to Word Conversion",
+    type: "document",
+    link: "",
     image: convertImage,
-    description:
-      "We often deal with many types of files—images, audio files, videos, PDFs, documents,...",
+    description: "Turn your PDFs into editable Word documents easily...",
+  },
+  {
+    title: "eBook Formats Explained",
+    type: "ebook",
+    link: "",
+    image: convertImage,
+    description: "Learn about EPUB, MOBI, and how to convert between them...",
+  },
+  {
+    title: "Archive Converter Guide",
+    type: "archive",
+    link: "",
+    image: convertImage,
+    description: "Unzip, convert and recompress RAR, ZIP, 7z files...",
+  },
+  {
+    title: "Webservice-Based File Conversion",
+    type: "webservice",
+    link: "",
+    image: convertImage,
+    description: "Serverless tools that help convert files online...",
+  },
+  {
+    title: "Image Conversion Explained",
+    type: "image",
+    link: "",
+    image: convertImage,
+    description: "JPG to PNG to SVG — learn the difference...",
+  },
+  {
+    title: "Device Specific Conversions",
+    type: "device",
+    link: "",
+    image: convertImage,
+    description: "How to convert files for phones, tablets, etc.",
   },
 ];
 
+
 const Blogs = () => {
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
+    <div className="max-w-6xl mx-auto px-4 py-12 ">
       <h1 className="text-3xl text-red-600 font-bold text-center mb-2">Blogs</h1>
       <p className="text-center text-gray-600 mb-8">Latest news and updates</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 ">
         {blogs.map((blog, index) => (
           <div
             key={index}
-            className="bg-white rounded-lg shadow border overflow-hidden hover:shadow-lg transition"
+            className="bg-white rounded-lg shadow border overflow-hidden hover:shadow-lg transition border-[#ced4da]"
           >
             <img
               src={blog.image}

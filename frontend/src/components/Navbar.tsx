@@ -58,12 +58,12 @@ const Navbar = () => {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-8 py-3 bg-white shadow-md">
-        <div className="flex items-center space-x-10 gap-5">
+      <nav className="sticky top-0 z-50 flex items-center justify-between px-8 py-3  bg-white shadow-md">
+        <div className="flex items-center space-x-10 gap-5 ">
           <img
             src="https://convertio.info/assets/img/logo.png"
             alt="Converter Logo"
-            className="w-13 h-6 object-contain"
+            className="w-30 h-7 object-contain"
           />
           <div className="flex ml-10 space-x-6 text-lg gap-5 text-[15px]">
             <a href="/" className="hover:text-red-600">Home</a>
@@ -74,9 +74,9 @@ const Navbar = () => {
             >
               Converter <ChevronDown size={14} className="ml-1" />
             </button>
-            <a href="aboutpage">About</a>
-            <a href="blogpage">Blogs</a>
-            <a href="contactpage" className="hover:text-red-600">ContactPage</a>
+            <a href="/aboutpage" className="hover:text-red-600">About</a>
+            <a href="/blogpage" className="hover:text-red-600">Blogs</a>
+            <a href="/contactpage" className="hover:text-red-600">Contact</a>
           </div>
         </div>
 
@@ -87,7 +87,7 @@ const Navbar = () => {
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             placeholder="Search converter..."
-            className="border p-2 pl-4 pr-8 py-1 text-md w-64 focus:outline-none focus:ring-2 rounded-lg"
+            className="border-1 border-[#ced4da] p-2 pl-4 pr-8 py-1 text-md w-64 focus:outline-none  rounded-lg"
           />
 
           {searchTerm && (
@@ -104,7 +104,7 @@ const Navbar = () => {
           )}
 
           {filtered.length > 0 && (
-            <div className="absolute top-full mt-1 w-full bg-white border rounded-md shadow-md z-50">
+            <div className="absolute border-[#ced4da] top-full mt-1 w-full bg-white border rounded-md shadow-md z-50">
               {filtered.map((item, idx) => (
                 <div
                   key={idx}
@@ -126,7 +126,7 @@ const Navbar = () => {
       {dropdownOpen && (
         <div
           ref={dropdownRef}
-          className="fixed top-[50px] left-0 w-full bg-white shadow-md border-t z-[999] transition-all duration-300 ease-in-out"
+          className="fixed top-[50px] left-0 w-full border-[#ced4da] bg-white shadow-md border-t z-[999] transition-all duration-300 ease-in-out"
         >
           <div className="max-w-6xl mx-auto px-4 py-6">
             <Dropdownmenu closeDropdown={() => setDropdownOpen(false)} />

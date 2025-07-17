@@ -57,19 +57,22 @@ interface ConvertedFile {
   originalId: string;
 }
 
+
 export default function Dropbox() {
-  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID!;
-  const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY!;
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+  const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || "";
   const API_URL = import.meta.env.VITE_API_URL || "https://fileconverter-backend.onrender.com";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerLoaded = useRef(false);
   const [selectedFiles, setSelectedFiles] = useState<FileItem[]>([]);
   const [isConverting, setIsConverting] = useState(false);
-  const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]);
+  const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]); // Fixed typo
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log("Environment variables:", { GOOGLE_CLIENT_ID, GOOGLE_API_KEY, API_URL });
+
     const loadGoogleApiScript = () => {
       if (!document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
         const script = document.createElement("script");
@@ -85,6 +88,7 @@ export default function Dropbox() {
         };
         document.body.appendChild(script);
       } else {
+        console.log("Google API script already present");
         initializeGoogleApi();
       }
     };
@@ -100,18 +104,11 @@ export default function Dropbox() {
                 scope: "https://www.googleapis.com/auth/drive.readonly",
                 discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
                 prompt: "select_account",
-              });
-              console.log("Google API client initialized");
-              window.gapi.load("picker", {
-                callback: () => {
-                  if (window.google?.picker) {
-                    pickerLoaded.current = true;
-                    console.log("Google Picker API loaded");
-                  } else {
-                    console.error("Google Picker API not available");
-                    setErrorMessage("Google Picker API failed to load. Please try again.");
-                  }
-                },
+              }).then(() => {
+                // Do nothing here, init succeeded
+              }, (error) => {
+                console.error("gapi.client.init error", error);
+                setErrorMessage("Google client init failed: " + error.details);
               });
             } catch (err) {
               console.error("Google API initialization failed:", err);
@@ -172,7 +169,7 @@ export default function Dropbox() {
 
   const handleDropboxUpload = () => {
     if (!window.Dropbox) {
-      setErrorMessage("Dropbox SDK not loaded.");
+      setErrorMessage("Dropbox SDK not loaded. Please ensure the Dropbox script is included.");
       return;
     }
     window.Dropbox.choose({
@@ -340,13 +337,13 @@ export default function Dropbox() {
 
   const formatOptions: FormatOptions = {
     image: {
-      image: ["BMP", "EPS", "GIF", "ICO", "JPG", "SVG", "TGA", "TIFF", "WBMP", "WEBP"],
-      compressor: ["JPG Image Compress", "PNG Image Compress", "SVG Image Compress"],
-      pdf: ["IMAGES TO PDF"],
+      image: ["BMP", "EPS", "GIF", "ICO", "JPG", "PNG", "SVG", "TGA", "TIFF", "WBMP", "WEBP"],
+      compressor: ["JPG", "PNG", "SVG"],
+      pdf: ["PDF"],
     },
     pdfs: {
       document: ["DOC", "DOCX", "HTML", "ODT", "PPT", "PPTX", "RTF", "TXT", "XLSX", "PDF"],
-      compressor: ["PDF Document Compress"],
+      compressor: ["PDF"],
       ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
       pdf_ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
       pdf_to_image: ["JPG", "PNG", "GIF"],
@@ -355,10 +352,10 @@ export default function Dropbox() {
       audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "OGG", "OPUS", "WAV", "WMA", "3G2"],
     },
     video: {
+      video: ["3G2", "3GP", "AVI", "FLV", "MKV", "MOV", "MPG", "OGV", "WEBM", "WMV"],
       audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "MP3", "OGG", "OPUS", "WAV", "WMA", "3G2"],
       device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
-      video: ["3G2", "3GP", "AVI", "FLV", "MKV", "MOV", "MPG", "OGV", "WEBM", "WMV"],
-      compressor: ["MP4 Video Compress"],
+      compressor: ["MP4"],
       webservice: ["DAILYMOTION", "FACEBOOK", "INSTAGRAM", "TELEGRAM", "TWITCH", "TWITTER", "VIBER", "VIMEO", "WHATSAPP", "YOUTUBE"],
     },
     document: ["DOCX", "PDF", "TXT", "RTF", "ODT"],
@@ -417,7 +414,7 @@ export default function Dropbox() {
       const [subSection, target] = item.selectedFormat.split(':');
       return {
         name: item.file.name,
-        target: target.toLowerCase().replace(' image compress', '').replace(' document compress', '').replace(' video compress', ''),
+        target: target.toLowerCase(),
         type: item.section,
         subSection,
         id: item.id,
@@ -437,7 +434,7 @@ export default function Dropbox() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort(new Error("Conversion request timed out after 120 seconds"));
-      }, 120000); // Increased to 120 seconds
+      }, 120000);
 
       const res = await fetch(`${API_URL}/api/convert`, {
         method: "POST",
@@ -520,8 +517,8 @@ export default function Dropbox() {
   return (
     <div>
       <div className="flex items-center justify-center">
-        <div className="flex flex-col items-center justify-center space-y-2 converter-wrapper tall p-12 m-4 rounded-md">
-          <div className="bg-red-500 text-white relative gap-4 rounded-md px-8 py-6 flex items-center space-x-6 shadow-md w-[50%] justify-center">
+        <div className="flex flex-col items-center justify-center space-y-2 converter-wrapper pt-10 m-4 rounded-md bg-white shadow-lg w-full max-w-3xl">
+          <div className="bg-red-500 text-white gap-4 rounded-md px-8 py-6 flex items-center space-x-6 shadow-md w-[50%] justify-center">
             <span className="font-semibold text-[15px]">Choose Files</span>
             <FaFolderOpen
               onClick={handleLocalFileClick}
@@ -547,7 +544,7 @@ export default function Dropbox() {
               className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
             />
           </div>
-          <div className="dropboxfoot mt-5 text-sm text-gray-400">
+          <div className="dropboxfoot mt-3 text-sm text-gray-400">
             100 MB maximum file size and up to 5 files.
           </div>
           {errorMessage && (
@@ -562,9 +559,9 @@ export default function Dropbox() {
               return (
                 <div
                   key={item.id}
-                  className="relative bg-white text-gray-700 rounded-md px-4 py-3 shadow-md border"
+                  className="relative bg-white text-gray-700 rounded-md px-4 py-3 shadow-md border mb-2"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between ">
                     <div className="flex items-center gap-3 overflow-hidden">
                       <span className="text-xl">📄</span>
                       <p className="truncate max-w-[160px] text-sm font-medium">
@@ -609,9 +606,8 @@ export default function Dropbox() {
                         {Object.keys(formatOptions[item.section]).map((subSection) => (
                           <button
                             key={subSection}
-                            className={`text-left px-2 py-1 rounded hover:bg-[#333] ${
-                              item.selectedSubSection === subSection ? "text-white font-bold" : "text-gray-400"
-                            }`}
+                            className={`text-left px-2 py-1 rounded hover:bg-[#333] ${item.selectedSubSection === subSection ? "text-white font-bold" : "text-gray-400"
+                              }`}
                             onClick={() => selectSubSection(index, subSection)}
                           >
                             {subSection.charAt(0).toUpperCase() + subSection.slice(1).replace('_', ' ')}
@@ -654,4 +650,4 @@ export default function Dropbox() {
       </div>
     </div>
   );
-} 
+}
