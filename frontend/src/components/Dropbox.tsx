@@ -54,287 +54,94 @@ interface ConvertedFile {
   name: string;
   url: string;
   loading: boolean;
+  converting: boolean; // Added to track conversion state
   originalId: string;
 }
-
 
 export default function Dropbox() {
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
   const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || "";
+  const DROPBOX_APP_KEY = import.meta.env.VITE_DROPBOX_APP_KEY || "";
   const API_URL = import.meta.env.VITE_API_URL || "https://fileconverter-backend.onrender.com";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerLoaded = useRef(false);
   const [selectedFiles, setSelectedFiles] = useState<FileItem[]>([]);
   const [isConverting, setIsConverting] = useState(false);
-  const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]); // Fixed typo
+  const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
+  // Load Google APIs and Dropbox SDK
   useEffect(() => {
-    console.log("Environment variables:", { GOOGLE_CLIENT_ID, GOOGLE_API_KEY, API_URL });
-
-    const loadGoogleApiScript = () => {
-      if (!document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
-        const script = document.createElement("script");
-        script.src = "https://apis.google.com/js/api.js";
-        script.async = true;
-        script.onload = () => {
-          console.log("Google API script loaded");
-          initializeGoogleApi();
-        };
-        script.onerror = () => {
-          console.error("Failed to load Google API script");
-          setErrorMessage("Failed to load Google API script. Please check your network or browser settings.");
-        };
-        document.body.appendChild(script);
-      } else {
-        console.log("Google API script already present");
-        initializeGoogleApi();
-      }
-    };
-
-    const initializeGoogleApi = () => {
-      if (window.gapi) {
-        window.onApiLoad = () => {
-          window.gapi.load("client:auth2", async () => {
-            try {
-              await window.gapi.client.init({
-                apiKey: GOOGLE_API_KEY,
-                clientId: GOOGLE_CLIENT_ID,
-                scope: "https://www.googleapis.com/auth/drive.readonly",
-                discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
-                prompt: "select_account",
-              }).then(() => {
-                // Do nothing here, init succeeded
-              }, (error) => {
-                console.error("gapi.client.init error", error);
-                setErrorMessage("Google client init failed: " + error.details);
-              });
-            } catch (err) {
-              console.error("Google API initialization failed:", err);
-              // setErrorMessage("Failed to initialize Google API. Check your API key and client ID.");
-            }
-          });
-        };
-        if (window.gapi.load) {
-          window.onApiLoad();
-        }
-      } else {
-        console.error("Google API (gapi) not available");
-        setErrorMessage("Google API not available. Please try again later.");
-      }
-    };
-
-    loadGoogleApiScript();
-
-    return () => {
-      convertedFiles.forEach(file => window.URL.revokeObjectURL(file.url));
-      delete window.onApiLoad;
-    };
-  }, [convertedFiles, GOOGLE_API_KEY, GOOGLE_CLIENT_ID]);
-
-  const handleLocalFileClick = () => fileInputRef.current?.click();
-
-  const handleLocalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      if (selectedFiles.length + files.length > 5) {
-        setErrorMessage("Maximum 5 files allowed.");
-        return;
-      }
-      const newFiles = Array.from(files).map((f) => {
-        const ext = f.name.split('.').pop()?.toLowerCase() || '';
-        const section = ext === 'pdf' ? 'pdfs' :
-          ['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'].includes(ext) ? 'image' :
-            ['doc', 'docx', 'txt', 'rtf', 'odt', 'html', 'ppt', 'pptx', 'xlsx'].includes(ext) ? 'document' :
-              ['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'm4v', 'mmf', '3g2'].includes(ext) ? 'audio' :
-                ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv', '3gp', 'mpg', 'ogv'].includes(ext) ? 'video' :
-                  ['zip', '7z'].includes(ext) ? 'archive' :
-                    ['epub', 'mobi', 'azw3', 'fb2', 'lit', 'lrf', 'pdb', 'tcr'].includes(ext) ? 'ebook' : 'image';
-        return {
-          file: f,
-          showMenu: false,
-          section: section as keyof FormatOptions,
-          selectedFormat: "",
-          source: 'local',
-          id: `${f.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
-        };
-      });
-      setSelectedFiles((prev) => [...prev, ...newFiles]);
-      setConvertedFiles([]);
-      setErrorMessage(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleDropboxUpload = () => {
-    if (!window.Dropbox) {
-      setErrorMessage("Dropbox SDK not loaded. Please ensure the Dropbox script is included.");
-      return;
-    }
-    window.Dropbox.choose({
-      linkType: "direct",
-      multiselect: true,
-      extensions: [
-        '.mp3', '.wav', '.aac', '.flac', '.ogg', '.opus', '.wma', '.aiff', '.m4v', '.mmf', '.3g2',
-        '.mp4', '.avi', '.mov', '.webm', '.mkv', '.flv', '.wmv', '.3gp', '.mpg', '.ogv',
-        '.png', '.jpg', '.jpeg', '.webp', '.svg', '.bmp', '.gif', '.ico', '.tga', '.tiff', '.wbmp',
-        '.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt', '.html', '.ppt', '.pptx', '.xlsx',
-        '.zip', '.7z',
-        '.epub', '.mobi', '.azw3', '.fb2', '.lit', '.lrf', '.pdb', '.tcr',
-      ],
-      success: async (files: any[]) => {
-        if (selectedFiles.length + files.length > 5) {
-          setErrorMessage("Maximum 5 files allowed.");
-          return;
-        }
-        const newFiles = await Promise.all(files.map(async (f) => {
+    const loadGapiAndGis = () => {
+      // Load Google API client
+      const gapiScript = document.createElement("script");
+      gapiScript.src = "https://apis.google.com/js/api.js";
+      gapiScript.async = true;
+      gapiScript.onload = () => {
+        window.gapi.load("client:picker", async () => {
           try {
-            const response = await fetch(f.link);
-            if (!response.ok) throw new Error(`Failed to fetch Dropbox file: ${f.name}`);
-            const blob = await response.blob();
-            const ext = f.name.split('.').pop()?.toLowerCase() || '';
-            const section = ext === 'pdf' ? 'pdfs' :
-              ['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'].includes(ext) ? 'image' :
-                ['doc', 'docx', 'txt', 'rtf', 'odt', 'html', 'ppt', 'pptx', 'xlsx'].includes(ext) ? 'document' :
-                  ['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'm4v', 'mmf', '3g2'].includes(ext) ? 'audio' :
-                    ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv', '3gp', 'mpg', 'ogv'].includes(ext) ? 'video' :
-                      ['zip', '7z'].includes(ext) ? 'archive' :
-                        ['epub', 'mobi', 'azw3', 'fb2', 'lit', 'lrf', 'pdb', 'tcr'].includes(ext) ? 'ebook' : 'image';
-            return {
-              file: new File([blob], f.name, { type: blob.type }),
-              showMenu: false,
-              section: section as keyof FormatOptions,
-              selectedFormat: "",
-              source: 'dropbox',
-              url: f.link,
-              id: `${f.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
-            };
-          } catch (err) {
-            console.error(`Error fetching Dropbox file ${f.name}:`, err);
-            return null;
-          }
-        }));
-        const validFiles = newFiles.filter(f => f !== null) as FileItem[];
-        setSelectedFiles((prev) => [...prev, ...validFiles]);
-        setConvertedFiles([]);
-        setErrorMessage(null);
-      },
-      error: (err: any) => {
-        console.error("Dropbox picker error:", err);
-        setErrorMessage("Failed to load files from Dropbox.");
-      },
-    });
-  };
-
-  const handleGoogleDriveUpload = () => {
-    if (!pickerLoaded.current) {
-      console.warn("Google Picker not loaded yet. Attempting to initialize...");
-      setErrorMessage("Google Picker is not ready. Please try again in a moment.");
-      window.gapi?.load("picker", {
-        callback: () => {
-          if (window.google?.picker) {
+            await window.gapi.client.init({
+              apiKey: GOOGLE_API_KEY,
+              discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+            });
             pickerLoaded.current = true;
-            console.log("Google Picker API loaded on retry");
-            triggerGoogleSignIn();
-          } else {
-            console.error("Google Picker API failed to load on retry");
-            setErrorMessage("Google Picker failed to load. Please refresh the page.");
+            console.log("Google API client initialized");
+          } catch (err) {
+            console.error("Failed to init gapi client:", err);
+            setErrorMessage("Failed to initialize Google API client.");
           }
-        },
-      });
-      return;
-    }
-    triggerGoogleSignIn();
+        });
+      };
+      gapiScript.onerror = () => {
+        setErrorMessage("Failed to load Google API script.");
+      };
+      document.body.appendChild(gapiScript);
+
+      // Load Google Identity Services
+      const gisScript = document.createElement("script");
+      gisScript.src = "https://accounts.google.com/gsi/client";
+      gisScript.async = true;
+      gisScript.onload = () => {
+        console.log("Google Identity Services loaded");
+      };
+      gisScript.onerror = () => {
+        setErrorMessage("Failed to load Google Identity Services script.");
+      };
+      document.body.appendChild(gisScript);
+
+      // Load Dropbox SDK
+      const dropboxScript = document.createElement("script");
+      dropboxScript.src = "https://www.dropbox.com/static/api/2/dropins.js";
+      dropboxScript.id = "dropboxjs";
+      dropboxScript.setAttribute("data-app-key", DROPBOX_APP_KEY);
+      dropboxScript.async = true;
+      dropboxScript.onerror = () => {
+        setErrorMessage("Failed to load Dropbox SDK.");
+      };
+      document.body.appendChild(dropboxScript);
+    };
+
+    loadGapiAndGis();
+  }, [GOOGLE_API_KEY, DROPBOX_APP_KEY]);
+
+  // Map file extension to format section
+  const getFormatSection = (ext: string): keyof FormatOptions => {
+    ext = ext.toLowerCase();
+    if (ext === "pdf") return "pdfs";
+    if (["bmp", "eps", "gif", "ico", "png", "svg", "tga", "tiff", "wbmp", "webp", "jpg", "jpeg"].includes(ext))
+      return "image";
+    if (["doc", "docx", "txt", "rtf", "odt", "html", "ppt", "pptx", "xlsx"].includes(ext)) return "document";
+    if (["mp3", "wav", "aac", "flac", "ogg", "opus", "wma", "aiff", "m4v", "mmf", "3g2"].includes(ext))
+      return "audio";
+    if (["mp4", "avi", "mov", "webm", "mkv", "flv", "wmv", "3gp", "mpg", "ogv"].includes(ext)) return "video";
+    if (["zip", "7z"].includes(ext)) return "archive";
+    if (["epub", "mobi", "azw3", "fb2", "lit", "lrf", "pdb", "tcr"].includes(ext)) return "ebook";
+    return "image"; // Default fallback
   };
 
-  const triggerGoogleSignIn = async () => {
-    if (!window.gapi?.auth2) {
-      console.error("Google auth2 not available");
-      setErrorMessage("Google authentication service not available. Please try again later.");
-      return;
-    }
-    try {
-      const auth2 = window.gapi.auth2.getAuthInstance();
-      const googleUser = await auth2.signIn({
-        prompt: "select_account consent",
-        scope: "https://www.googleapis.com/auth/drive.readonly",
-      });
-      const token = googleUser.getAuthResponse().access_token;
-      console.log("Google Sign-in successful, access token:", token);
-      createGooglePicker(token);
-    } catch (err: any) {
-      console.error("Google Sign-in failed:", err);
-      if (err.error === "idpiframe_initialization_failed") {
-        setErrorMessage("Google Sign-in failed: Third-party cookies are blocked. Please enable cookies in your browser settings or try a different browser.");
-      } else if (err.error === "IdentityCredentialError") {
-        setErrorMessage("Google Sign-in failed: Unable to retrieve token. Check your credentials or try again.");
-      } else {
-        setErrorMessage(`Google Sign-in failed: ${err.error || "Unknown error"}. Please check your credentials or try again.`);
-      }
-    }
-  };
-
-  const createGooglePicker = async (token: string) => {
-    if (pickerLoaded.current && token && window.google?.picker) {
-      console.log("Creating Google Picker with token:", token);
-      const picker = new window.google.picker.PickerBuilder()
-        .addView(window.google.picker.ViewId.DOCS)
-        .setOAuthToken(token)
-        .setDeveloperKey(GOOGLE_API_KEY)
-        .setCallback(async (data: any) => {
-          if (data.action === window.google.picker.Action.PICKED) {
-            console.log("Files picked from Google Drive:", data.docs);
-            if (selectedFiles.length + data.docs.length > 5) {
-              setErrorMessage("Maximum 5 files allowed.");
-              return;
-            }
-            const newFiles = await Promise.all(data.docs.map(async (doc: any) => {
-              try {
-                const response = await fetch(
-                  `https://www.googleapis.com/drive/v3/files/${doc.id}?alt=media`,
-                  {
-                    headers: { Authorization: `Bearer ${token}` },
-                  }
-                );
-                if (!response.ok) throw new Error(`Failed to fetch Google Drive file: ${doc.name}`);
-                const blob = await response.blob();
-                const ext = doc.name.split('.').pop()?.toLowerCase() || '';
-                const section = ext === 'pdf' ? 'pdfs' :
-                  ['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'].includes(ext) ? 'image' :
-                    ['doc', 'docx', 'txt', 'rtf', 'odt', 'html', 'ppt', 'pptx', 'xlsx'].includes(ext) ? 'document' :
-                      ['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'm4v', 'mmf', '3g2'].includes(ext) ? 'audio' :
-                        ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv', '3gp', 'mpg', 'ogv'].includes(ext) ? 'video' :
-                          ['zip', '7z'].includes(ext) ? 'archive' :
-                            ['epub', 'mobi', 'azw3', 'fb2', 'lit', 'lrf', 'pdb', 'tcr'].includes(ext) ? 'ebook' : 'image';
-                return {
-                  file: new File([blob], doc.name, { type: blob.type }),
-                  showMenu: false,
-                  section: section as keyof FormatOptions,
-                  selectedFormat: "",
-                  source: 'google',
-                  url: doc.url,
-                  id: `${doc.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
-                };
-              } catch (err) {
-                console.error(`Error fetching Google Drive file ${doc.name}:`, err);
-                return null;
-              }
-            }));
-            const validFiles = newFiles.filter(f => f !== null) as FileItem[];
-            setSelectedFiles((prev) => [...prev, ...validFiles]);
-            setConvertedFiles([]);
-            setErrorMessage(null);
-          }
-        })
-        .build();
-      picker.setVisible(true);
-    } else {
-      console.error("Cannot create Google Picker. PickerLoaded:", pickerLoaded.current, "Token:", !!token, "Google Picker:", !!window.google?.picker);
-      setErrorMessage("Failed to create Google Picker. Please try again.");
-    }
-  };
-
+  // Format options configuration
   const formatOptions: FormatOptions = {
     image: {
       image: ["BMP", "EPS", "GIF", "ICO", "JPG", "PNG", "SVG", "TGA", "TIFF", "WBMP", "WEBP"],
@@ -363,6 +170,210 @@ export default function Dropbox() {
     ebook: ["EPUB", "MOBI", "PDF", "AZW3"],
   };
 
+  // Trigger Google Drive Picker
+  const handleGoogleDriveUpload = () => {
+    if (!pickerLoaded.current) {
+      setErrorMessage("Google Picker is not ready. Please try again shortly.");
+      return;
+    }
+    triggerGoogleSignIn();
+  };
+
+  // Initialize Google Sign-In
+  const triggerGoogleSignIn = () => {
+    if (!window.google?.accounts?.oauth2) {
+      setErrorMessage("Google Identity Services not loaded. Please try again.");
+      return;
+    }
+
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: "https://www.googleapis.com/auth/drive.readonly",
+      callback: (response: any) => {
+        if (response?.access_token) {
+          console.log("Received access token:", response.access_token);
+          setAccessToken(response.access_token);
+          createGooglePicker(response.access_token);
+        } else {
+          console.error("No access token returned:", response);
+          setErrorMessage("Google Sign-in failed: No access token received.");
+        }
+      },
+    });
+
+    tokenClient.requestAccessToken();
+  };
+
+  // Create Google Picker
+  const createGooglePicker = (token: string) => {
+    if (pickerLoaded.current && window.google?.picker && typeof window.google.picker.PickerBuilder === "function") {
+      try {
+        const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
+        const picker = new window.google.picker.PickerBuilder()
+          .addView(view)
+          .setOAuthToken(token)
+          .setDeveloperKey(GOOGLE_API_KEY)
+          .setOrigin("http://localhost:5173")
+          .setCallback((data: any) => handlePickerResponse(data, token))
+          .build();
+        picker.setVisible(true);
+      } catch (err) {
+        console.error("Failed to create Google Picker:", err);
+        setErrorMessage("Failed to initialize Google Picker. Please try again.");
+      }
+    } else {
+      setErrorMessage("Google Picker API not loaded. Please try again.");
+    }
+  };
+
+  // Handle Google Picker response
+  const handlePickerResponse = async (data: any, token: string) => {
+    if (data.action === window.google.picker.Action.PICKED) {
+      const docs = data.docs;
+      if (selectedFiles.length + docs.length > 5) {
+        setErrorMessage("Maximum 5 files allowed.");
+        return;
+      }
+
+      if (!token) {
+        setErrorMessage("Access token missing. Please sign in again.");
+        triggerGoogleSignIn();
+        return;
+      }
+
+      const newFiles = await Promise.all(
+        docs.map(async (doc: any) => {
+          try {
+            const response = await fetch(
+              `https://www.googleapis.com/drive/v3/files/${doc.id}?alt=media`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
+            );
+            if (!response.ok) {
+              const errorData = await response.json();
+              console.error("API error details:", errorData);
+              if (response.status === 401) {
+                setErrorMessage("Unauthorized access. Please sign in again.");
+                setAccessToken(null);
+                triggerGoogleSignIn();
+                return null;
+              }
+              throw new Error(`Failed to fetch file: ${response.status}, ${errorData.error?.message}`);
+            }
+            const blob = await response.blob();
+            const ext = doc.name.split(".").pop()?.toLowerCase() || "bin";
+            const section = getFormatSection(ext);
+            return {
+              file: new File([blob], doc.name, { type: blob.type }),
+              showMenu: false,
+              section: section as keyof FormatOptions,
+              selectedFormat: "",
+              source: "google",
+              url: doc.url,
+              id: `${doc.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
+            };
+          } catch (err) {
+            console.error("Failed to fetch Google Drive file", doc.name, err);
+            return null;
+          }
+        })
+      );
+
+      const validFiles = newFiles.filter((f): f is FileItem => f !== null);
+      setSelectedFiles((prev) => [...prev, ...validFiles]);
+      setConvertedFiles([]);
+      setErrorMessage(null);
+    }
+  };
+
+  // Handle local file upload
+  const handleLocalFileClick = () => fileInputRef.current?.click();
+
+  const handleLocalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      if (selectedFiles.length + files.length > 5) {
+        setErrorMessage("Maximum 5 files allowed.");
+        return;
+      }
+      const newFiles = Array.from(files).map((f) => {
+        const ext = f.name.split(".").pop()?.toLowerCase() || "";
+        const section = getFormatSection(ext);
+        return {
+          file: f,
+          showMenu: false,
+          section: section as keyof FormatOptions,
+          selectedFormat: "",
+          source: "local",
+          id: `${f.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
+        };
+      });
+      setSelectedFiles((prev) => [...prev, ...newFiles]);
+      setConvertedFiles([]);
+      setErrorMessage(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // Handle Dropbox upload
+  const handleDropboxUpload = () => {
+    if (!window.Dropbox) {
+      setErrorMessage("Dropbox SDK not loaded. Please ensure the Dropbox script is included.");
+      return;
+    }
+    window.Dropbox.choose({
+      linkType: "direct",
+      multiselect: true,
+      extensions: [
+        ".mp3", ".wav", ".aac", ".flac", ".ogg", ".opus", ".wma", ".aiff", ".m4v", ".mmf", ".3g2",
+        ".mp4", ".avi", ".mov", ".webm", ".mkv", ".flv", ".wmv", ".3gp", ".mpg", ".ogv",
+        ".png", ".jpg", ".jpeg", ".webp", ".svg", ".bmp", ".gif", ".ico", ".tga", ".tiff", ".wbmp",
+        ".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".html", ".ppt", ".pptx", ".xlsx",
+        ".zip", ".7z",
+        ".epub", ".mobi", ".azw3", ".fb2", ".lit", ".lrf", ".pdb", ".tcr",
+      ],
+      success: async (files: any[]) => {
+        if (selectedFiles.length + files.length > 5) {
+          setErrorMessage("Maximum 5 files allowed.");
+          return;
+        }
+        const newFiles = await Promise.all(
+          files.map(async (f) => {
+            try {
+              const response = await fetch(f.link);
+              if (!response.ok) throw new Error(`Failed to fetch Dropbox file: ${f.name}`);
+              const blob = await response.blob();
+              const ext = f.name.split(".").pop()?.toLowerCase() || "";
+              const section = getFormatSection(ext);
+              return {
+                file: new File([blob], f.name, { type: blob.type }),
+                showMenu: false,
+                section: section as keyof FormatOptions,
+                selectedFormat: "",
+                source: "dropbox",
+                url: f.link,
+                id: `${f.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
+              };
+            } catch (err) {
+              console.error(`Error fetching Dropbox file ${f.name}:`, err);
+              return null;
+            }
+          })
+        );
+        const validFiles = newFiles.filter((f): f is FileItem => f !== null);
+        setSelectedFiles((prev) => [...prev, ...validFiles]);
+        setConvertedFiles([]);
+        setErrorMessage(null);
+      },
+      error: (err: any) => {
+        console.error("Dropbox picker error:", err);
+        setErrorMessage("Failed to load files from Dropbox.");
+      },
+    });
+  };
+
+  // Toggle format selection menu
   const toggleMenu = (index: number) => {
     setSelectedFiles((prev) =>
       prev.map((item, i) =>
@@ -371,11 +382,13 @@ export default function Dropbox() {
     );
   };
 
+  // Remove a selected file
   const removeFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
     setErrorMessage(null);
   };
 
+  // Select a subsection for format options
   const selectSubSection = (index: number, subSection: string) => {
     const updated = [...selectedFiles];
     updated[index].selectedSubSection = subSection;
@@ -383,6 +396,7 @@ export default function Dropbox() {
     setSelectedFiles(updated);
   };
 
+  // Select a format for conversion
   const selectFormat = (index: number, format: string, subSection: string) => {
     const updated = [...selectedFiles];
     updated[index].selectedFormat = `${subSection}:${format}`;
@@ -390,6 +404,7 @@ export default function Dropbox() {
     setSelectedFiles(updated);
   };
 
+  // Handle file conversion
   const handleConvert = async () => {
     if (isConverting) return;
     if (selectedFiles.length === 0) {
@@ -407,11 +422,15 @@ export default function Dropbox() {
       return;
     }
 
-    console.log("Starting conversion for files:", selectedFiles.map(item => ({ name: item.file.name, id: item.id, format: item.selectedFormat })));
+    console.log("Starting conversion for files:", selectedFiles.map((item) => ({
+      name: item.file.name,
+      id: item.id,
+      format: item.selectedFormat,
+    })));
 
     const formData = new FormData();
     const formats = selectedFiles.map((item) => {
-      const [subSection, target] = item.selectedFormat.split(':');
+      const [subSection, target] = item.selectedFormat.split(":");
       return {
         name: item.file.name,
         target: target.toLowerCase(),
@@ -421,13 +440,23 @@ export default function Dropbox() {
       };
     });
 
+    // Initialize converting state for all files
+    setConvertedFiles(
+      formats.map((format) => ({
+        name: format.name,
+        url: "",
+        loading: false,
+        converting: true,
+        originalId: format.id,
+      }))
+    );
+
     selectedFiles.forEach((item) => {
       formData.append("files", item.file);
     });
     formData.append("formats", JSON.stringify(formats));
 
     setIsConverting(true);
-    setConvertedFiles([]);
     setErrorMessage(null);
 
     try {
@@ -463,7 +492,7 @@ export default function Dropbox() {
             const blob = await fileRes.blob();
             const url = window.URL.createObjectURL(blob);
             const originalId = formats[index].id;
-            return { name: file.name, url, loading: false, originalId };
+            return { name: file.name, url, loading: false, converting: false, originalId };
           } catch (err) {
             console.error(`Error fetching file ${file.name}:`, err);
             return null;
@@ -471,10 +500,10 @@ export default function Dropbox() {
         })
       );
 
-      const validConverted = converted.filter(file => file !== null) as ConvertedFile[];
+      const validConverted = converted.filter((file): file is ConvertedFile => file !== null);
       console.log("Converted files set:", validConverted);
       setConvertedFiles(validConverted);
-      if (converted.some(file => file === null)) {
+      if (converted.some((file) => file === null)) {
         setErrorMessage("Some files failed to convert or download. Please try again.");
       } else if (validConverted.length === 0) {
         setErrorMessage("No files were converted successfully. Check file formats and try again.");
@@ -488,14 +517,22 @@ export default function Dropbox() {
         name: err.name,
         stack: err.stack,
       });
-      setErrorMessage(msg.includes("timeout") ? "Conversion timed out after 120 seconds. Try smaller files or check server status." : `Conversion failed: ${msg}`);
+      setErrorMessage(
+        msg.includes("timeout")
+          ? "Conversion timed out after 120 seconds. Try smaller files or check server status."
+          : `Conversion failed: ${msg}`
+      );
+      setConvertedFiles((prev) =>
+        prev.map((file) => ({ ...file, converting: false }))
+      );
     } finally {
       setIsConverting(false);
     }
   };
 
+  // Handle file download
   const handleDownload = async (url: string, name: string, index: number) => {
-    setConvertedFiles(prev =>
+    setConvertedFiles((prev) =>
       prev.map((file, i) => (i === index ? { ...file, loading: true } : file))
     );
     try {
@@ -508,7 +545,7 @@ export default function Dropbox() {
       console.error(`Error downloading file ${name}:`, err);
       setErrorMessage(`Failed to download ${name}. Please try again.`);
     } finally {
-      setConvertedFiles(prev =>
+      setConvertedFiles((prev) =>
         prev.map((file, i) => (i === index ? { ...file, loading: false } : file))
       );
     }
@@ -548,41 +585,48 @@ export default function Dropbox() {
             100 MB maximum file size and up to 5 files.
           </div>
           {errorMessage && (
-            <div className="mt-4 text-red-500 text-sm font-medium">
-              {errorMessage}
-            </div>
+            <div className="mt-4 text-red-500 text-sm font-medium">{errorMessage}</div>
           )}
           <div className="mt-6 w-full max-w-2xl space-y-3">
             {selectedFiles.map((item, index) => {
-              const convertedFile = convertedFiles.find(file => file.originalId === item.id);
-              console.log(`Checking match for ${item.file.name} (ID: ${item.id}):`, convertedFile ? convertedFile.name : 'No match');
+              const convertedFile = convertedFiles.find((file) => file.originalId === item.id);
+              console.log(
+                `Checking match for ${item.file.name} (ID: ${item.id}):`,
+                convertedFile ? convertedFile.name : "No match"
+              );
               return (
                 <div
                   key={item.id}
                   className="relative bg-white text-gray-700 rounded-md px-4 py-3 shadow-md border mb-2"
                 >
-                  <div className="flex items-center justify-between ">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 overflow-hidden">
-                      <span className="text-xl">📄</span>
-                      <p className="truncate max-w-[160px] text-sm font-medium">
-                        {item.file.name}
-                      </p>
+                      {convertedFile?.converting ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 border-2 border-t-2 border-gray-300 border-t-red-500 rounded-full animate-spin"></div>
+                          <span className="text-sm text-gray-400" aria-live="polite">Converting...</span>
+                        </div>
+                      ) : (
+                        <span className="text-xl">📄</span>
+                      )}
+                      <p className="truncate max-w-[160px] text-sm font-medium">{item.file.name}</p>
                       <span className="text-sm text-gray-400">to</span>
                       <button
                         className="bg-gray-200 hover:bg-gray-300 text-sm rounded-md px-2 py-1"
                         onClick={() => toggleMenu(index)}
+                        disabled={convertedFile?.converting}
                       >
-                        {item.selectedFormat.split(':')[1] || "Select format"}
+                        {item.selectedFormat.split(":")[1] || "Select format"}
                       </button>
                     </div>
                     <div className="flex items-center gap-2">
-                      {convertedFile && (
+                      {convertedFile && !convertedFile.converting && (
                         <button
                           onClick={() =>
                             handleDownload(
                               convertedFile.url,
                               convertedFile.name,
-                              convertedFiles.findIndex(file => file.originalId === item.id)
+                              convertedFiles.findIndex((file) => file.originalId === item.id)
                             )
                           }
                           disabled={convertedFile.loading}
@@ -595,6 +639,7 @@ export default function Dropbox() {
                       <button
                         className="text-gray-400 hover:text-red-500 transition text-xl"
                         onClick={() => removeFile(index)}
+                        disabled={convertedFile?.converting}
                       >
                         ×
                       </button>
@@ -610,17 +655,25 @@ export default function Dropbox() {
                               }`}
                             onClick={() => selectSubSection(index, subSection)}
                           >
-                            {subSection.charAt(0).toUpperCase() + subSection.slice(1).replace('_', ' ')}
+                            {subSection.charAt(0).toUpperCase() + subSection.slice(1).replace("_", " ")}
                           </button>
                         ))}
                       </div>
                       <div className="flex-1 pl-4">
                         <div className="grid grid-cols-2 gap-2">
-                          {formatOptions[item.section][item.selectedSubSection || Object.keys(formatOptions[item.section])[0]].map((format) => (
+                          {formatOptions[item.section][
+                            item.selectedSubSection || Object.keys(formatOptions[item.section])[0]
+                          ].map((format) => (
                             <button
                               key={format}
                               className="bg-[#333] hover:bg-red-600 transition px-3 py-2 rounded text-white text-xs"
-                              onClick={() => selectFormat(index, format, item.selectedSubSection || Object.keys(formatOptions[item.section])[0])}
+                              onClick={() =>
+                                selectFormat(
+                                  index,
+                                  format,
+                                  item.selectedSubSection || Object.keys(formatOptions[item.section])[0]
+                                )
+                              }
                             >
                               {format}
                             </button>
@@ -642,7 +695,8 @@ export default function Dropbox() {
         <button
           onClick={handleConvert}
           disabled={isConverting || selectedFiles.length === 0}
-          className={`flex items-center gap-2 bg-red-400 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-red-500 transition ${isConverting || selectedFiles.length === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={`flex items-center gap-2 bg-red-400 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-red-500 transition ${isConverting || selectedFiles.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+            }`}
         >
           <FiArrowRight className="text-[16px]" />
           {isConverting ? "Converting..." : "Convert files"}
