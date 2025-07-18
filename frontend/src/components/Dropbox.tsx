@@ -141,34 +141,39 @@ export default function Dropbox() {
     return "image"; // Default fallback
   };
 
-  // Format options configuration
-  const formatOptions: FormatOptions = {
-    image: {
-      image: ["BMP", "EPS", "GIF", "ICO", "JPG", "PNG", "SVG", "TGA", "TIFF", "WBMP", "WEBP"],
-      compressor: ["JPG", "PNG", "SVG"],
-      pdf: ["PDF"],
-    },
-    pdfs: {
-      document: ["DOC", "DOCX", "HTML", "ODT", "PPT", "PPTX", "RTF", "TXT", "XLSX", "PDF"],
-      compressor: ["PDF"],
-      ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
-      pdf_ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
-      pdf_to_image: ["JPG", "PNG", "GIF"],
-    },
-    audio: {
-      audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "OGG", "OPUS", "WAV", "WMA", "3G2"],
-    },
-    video: {
-      video: ["3G2", "3GP", "AVI", "FLV", "MKV", "MOV", "MPG", "OGV", "WEBM", "WMV"],
-      audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "MP3", "OGG", "OPUS", "WAV", "WMA", "3G2"],
-      device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
-      compressor: ["MP4"],
-      webservice: ["DAILYMOTION", "FACEBOOK", "INSTAGRAM", "TELEGRAM", "TWITCH", "TWITTER", "VIBER", "VIMEO", "WHATSAPP", "YOUTUBE"],
-    },
-    document: ["DOCX", "PDF", "TXT", "RTF", "ODT"],
-    archive: ["ZIP", "7Z"],
-    ebook: ["EPUB", "MOBI", "PDF", "AZW3"],
-  };
+ // Updated format options with better organization
+const formatOptions: FormatOptions = {
+  image: {
+    // Standard image formats (supported by Sharp)
+    image: ["JPG", "PNG", "WEBP", "GIF", "TIFF"],
+    // Extended formats (requires FFmpeg)
+    extended: ["BMP", "ICO", "TGA", "WBMP"],
+    // Compression formats
+    compressor: ["JPG", "PNG", "WEBP"],
+    // Document conversion
+    pdf: ["PDF"],
+  },
+  pdfs: {
+    document: ["DOC", "DOCX", "HTML", "ODT", "PPT", "PPTX", "RTF", "TXT", "XLSX", "PDF"],
+    compressor: ["PDF"],
+    ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
+    pdf_ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
+    pdf_to_image: ["JPG", "PNG", "GIF"],
+  },
+  audio: {
+    audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "OGG", "OPUS", "WAV", "WMA", "3G2"],
+  },
+  video: {
+    video: ["3G2", "3GP", "AVI", "FLV", "MKV", "MOV", "MPG", "OGV", "WEBM", "WMV"],
+    audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "MP3", "OGG", "OPUS", "WAV", "WMA", "3G2"],
+    device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
+    compressor: ["MP4"],
+    webservice: ["DAILYMOTION", "FACEBOOK", "INSTAGRAM", "TELEGRAM", "TWITCH", "TWITTER", "VIBER", "VIMEO", "WHATSAPP", "YOUTUBE"],
+  },
+  document: ["DOCX", "PDF", "TXT", "RTF", "ODT"],
+  archive: ["ZIP", "7Z"],
+  ebook: ["EPUB", "MOBI", "PDF", "AZW3"],
+};
 
   // Trigger Google Drive Picker
   const handleGoogleDriveUpload = () => {

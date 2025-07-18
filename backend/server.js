@@ -26,7 +26,7 @@ const allFormats = [
 ];
 // Supported formats for each conversion type
 const supportedFormats = {
-  image: allFormats,
+  image: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'tiff', 'tif', 'bmp', 'ico', 'tga', 'wbmp'],
   compressor: ['jpg', 'png', 'svg'],
   pdfs: allFormats,
   audio: allFormats,
@@ -196,10 +196,105 @@ app.delete('/api/delete/:filename', async (req, res) => {
   }
 });
 // Conversion functions
+// Updated convertImage function with proper format handling
 async function convertImage(inputPath, outputPath, format) {
-  const imageFormats = ['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'];
+  const sharpSupportedFormats = ['jpeg', 'jpg', 'png', 'webp', 'gif', 'tiff', 'tif'];
   const inputExt = path.extname(inputPath).toLowerCase().slice(1);
-  if (!imageFormats.includes(inputExt) && ['pdf', 'docx', 'txt', 'rtf', 'odt'].includes(inputExt)) {
+  
+  // Handle special cases for formats not directly supported by Sharp
+  if (format === 'bmp') {
+    // Convert to PNG first, then use external tool or alternative method
+    const tempPngPath = path.join(convertedDir, `temp_${Date.now()}.png`);
+    try {
+      await sharp(inputPath)
+        .png()
+        .toFile(tempPngPath);
+      
+      // Use ffmpeg to convert PNG to BMP
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempPngPath)
+          .toFormat('bmp')
+          .on('end', () => resolve())
+          .on('error', (err) => reject(new Error(`BMP conversion failed: ${err.message}`)))
+          .save(outputPath);
+      });
+      
+      // Clean up temp file
+      await fsPromises.unlink(tempPngPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
+      console.log(`BMP conversion completed: ${outputPath}`);
+      return;
+    } catch (err) {
+      await fsPromises.unlink(tempPngPath).catch(() => {});
+      throw new Error(`BMP conversion failed: ${err.message}`);
+    }
+  }
+  
+  if (format === 'ico') {
+    // Convert to PNG first, then use external tool
+    const tempPngPath = path.join(convertedDir, `temp_${Date.now()}.png`);
+    try {
+      await sharp(inputPath)
+        .resize(32, 32) // ICO files are typically small
+        .png()
+        .toFile(tempPngPath);
+      
+      // Use ffmpeg to convert PNG to ICO
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempPngPath)
+          .toFormat('ico')
+          .on('end', () => resolve())
+          .on('error', (err) => reject(new Error(`ICO conversion failed: ${err.message}`)))
+          .save(outputPath);
+      });
+      
+      await fsPromises.unlink(tempPngPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
+      console.log(`ICO conversion completed: ${outputPath}`);
+      return;
+    } catch (err) {
+      await fsPromises.unlink(tempPngPath).catch(() => {});
+      throw new Error(`ICO conversion failed: ${err.message}`);
+    }
+  }
+  
+  if (format === 'eps') {
+    // EPS conversion requires special handling
+    throw new Error('EPS format conversion is not supported. Please use PDF or other vector formats.');
+  }
+  
+  if (format === 'svg') {
+    // SVG conversion from raster images is not practical
+    throw new Error('SVG format conversion from raster images is not supported. SVG is a vector format.');
+  }
+  
+  if (format === 'tga') {
+    // TGA conversion using ffmpeg
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .toFormat('tga')
+        .on('end', () => resolve())
+        .on('error', (err) => reject(new Error(`TGA conversion failed: ${err.message}`)))
+        .save(outputPath);
+    });
+    console.log(`TGA conversion completed: ${outputPath}`);
+    return;
+  }
+  
+  if (format === 'wbmp') {
+    // WBMP conversion using ffmpeg
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .toFormat('wbmp')
+        .on('end', () => resolve())
+        .on('error', (err) => reject(new Error(`WBMP conversion failed: ${err.message}`)))
+        .save(outputPath);
+    });
+    console.log(`WBMP conversion completed: ${outputPath}`);
+    return;
+  }
+  
+  // Handle document to image conversion
+  if (!['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'].includes(inputExt) && 
+      ['pdf', 'docx', 'txt', 'rtf', 'odt'].includes(inputExt)) {
     const tempPdfPath = path.join(convertedDir, `temp_${Date.now()}.pdf`);
     try {
       await convertDocument(inputPath, tempPdfPath, 'pdf');
@@ -211,12 +306,18 @@ async function convertImage(inputPath, outputPath, format) {
     }
     return;
   }
-  if (imageFormats.includes(format)) {
+  
+  // Handle formats supported by Sharp
+  if (sharpSupportedFormats.includes(format)) {
+    // Map format names for Sharp
+    const sharpFormat = format === 'jpg' ? 'jpeg' : format;
+    
     await sharp(inputPath)
-      .toFormat(format)
+      .toFormat(sharpFormat)
       .toFile(outputPath);
     console.log(`Image conversion completed: ${outputPath}`);
   } else if (format === 'pdf' || format === 'docx') {
+    // Handle conversion to document formats
     let tempPdfPath;
     try {
       if (format === 'pdf') {
@@ -224,6 +325,7 @@ async function convertImage(inputPath, outputPath, format) {
       } else {
         tempPdfPath = path.join(convertedDir, `temp_${Date.now()}.pdf`);
       }
+      
       const imageBuffer = await fsPromises.readFile(inputPath);
       await new Promise((resolve, reject) => {
         libre.soffice = 'C:\\Program Files\\LibreOffice\\program\\soffice.exe'; // Adjust if needed
@@ -246,6 +348,7 @@ async function convertImage(inputPath, outputPath, format) {
           });
         });
       });
+      
       if (format === 'docx') {
         const pdfBuffer = await fsPromises.readFile(tempPdfPath);
         await new Promise((resolve, reject) => {
@@ -279,9 +382,10 @@ async function convertImage(inputPath, outputPath, format) {
       throw err;
     }
   } else {
-    throw new Error(`Unsupported image output format: ${format}`);
+    throw new Error(`Unsupported image output format: ${format}. Supported formats: ${sharpSupportedFormats.join(', ')}, bmp, ico, tga, wbmp (via ffmpeg)`);
   }
 }
+
 async function convertPdf(inputPath, outputPath, format) {
   const inputExt = path.extname(inputPath).toLowerCase().slice(1);
   if (inputExt !== 'pdf') {
