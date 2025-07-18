@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: file-converter-backend
+    env: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 18.16.0
+      - key: PORT
+        value: 5001
+      - key: FRONTEND_URL
+        value: http://localhost:5173,https://nion-ochre.vercel.app
+      - key: CONVERSION_TIMEOUT
+        value: 120000
+      - key: NODE_ENV
+        value: production
+    preDeployCommand: |
+      apt-get update && \
+      apt-get install -y ffmpeg libvips-dev poppler-utils graphicsmagick imagemagick calibre && \
+      apt-get clean
+    postDeployCommand: |
+      vips --version && \
+      ffmpeg -version && \
+      ebook-convert --version && \
+      npm ls image-to-pdf fluent-ffmpeg sharp pdf2pic node-7z multi-format-converter
