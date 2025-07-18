@@ -122,14 +122,14 @@ async function checkDependencies() {
 const allowedOrigins = [
   ...(process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
-    : ['http://localhost:5173', 'https://nion-ochre.vercel.app']),
+    : ['http://localhost:5173', 'https://fileconverter-6uso.vercel.app/']),
 ];
 const uniqueAllowedOrigins = [...new Set(allowedOrigins)];
 if (!uniqueAllowedOrigins.includes('http://localhost:5173')) {
   uniqueAllowedOrigins.push('http://localhost:5173');
 }
-if (!uniqueAllowedOrigins.includes('https://nion-ochre.vercel.app')) {
-  uniqueAllowedOrigins.push('https://nion-ochre.vercel.app');
+if (!uniqueAllowedOrigins.includes('https://fileconverter-6uso.vercel.app/')) {
+  uniqueAllowedOrigins.push('https://fileconverter-6uso.vercel.app/');
 }
 
 const corsOptions = {
