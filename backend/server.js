@@ -449,6 +449,11 @@ async function cleanupFiles(filePaths) {
     }
   }
 }
+app.get('/', (req, res) => {
+  res.status(200).send('Backend server up and running 🚀');
+});
+
+
 // Start server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
