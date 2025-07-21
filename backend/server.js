@@ -593,8 +593,15 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
           case 'image':
             await convertImage(inputPath, outputPath, outputExt);
             break;
-          case 'compressor':
-            await convertCompressor(inputPath, outputPath, outputExt);
+          case "compressor":
+            const compressorQuality =
+              typeof formatInfo.quality === "number" ? formatInfo.quality : 80;
+            if (!SUPPORTED_COMPRESS_FORMATS.includes(outputExt)) {
+              throw new Error(
+                "Image compression is only supported for JPG, PNG, GIF, or SVG files."
+              );
+            }
+            await convertCompressor(inputPath, outputPath, outputExt, compressorQuality);
             break;
           case 'pdfs':
             await convertPdf(inputPath, outputPath, outputExt, file.originalname);
@@ -612,16 +619,7 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
           case 'ebook':
             await convertEbook(inputPath, outputPath, outputExt);
             break;
-          case "compressor":
-            const compressorQuality =
-              typeof formatInfo.quality === "number" ? formatInfo.quality : 80;
-            if (!SUPPORTED_COMPRESS_FORMATS.includes(outputExt)) {
-              throw new Error(
-                "Image compression is only supported for JPG, PNG, GIF, or SVG files."
-              );
-            }
-            await convertCompressor(inputPath, outputPath, outputExt, compressorQuality);
-            break;
+          
           default:
             throw new Error(`Unsupported conversion type: ${conversionType}`);
         }
