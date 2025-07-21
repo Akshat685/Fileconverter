@@ -148,7 +148,7 @@ export default function Dropbox() {
   // Format options configuration
   const formatOptions: FormatOptions = {
     image: {
-      image: ["GIF", "JPG", "PNG","TIFF", "WEBP"],
+      image: ["GIF", "JPG", "PNG", "TIFF", "WEBP"],
       compressor: ["Quality 90%", "Quality 70%", "Quality 50%"],
       pdf: ["PDF"],
     },
@@ -160,10 +160,10 @@ export default function Dropbox() {
       pdf_to_image: ["JPG", "PNG", "GIF"],
     },
     audio: {
-      audio: ["FLAC","OGG", "OPUS", "WAV",],
+      audio: ["FLAC", "OGG", "OPUS", "WAV",],
     },
     video: {
-      video: [ "AVI", "FLV",]
+      video: ["AVI", "FLV",]
       // audio: ["FLAC","OGG", "OPUS", "WAV", ],
       // device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
       // compressor: ["MP4"],
@@ -174,7 +174,7 @@ export default function Dropbox() {
     ebook: ["EPUB", "MOBI", "PDF", "AZW3"],
   };
 
-   const [compressError, setCompressError] = useState<{ [id: string]: string }>({});
+  const [compressError, setCompressError] = useState<{ [id: string]: string }>({});
 
   // Trigger Google Drive Picker
   // const handleGoogleDriveUpload = () => {
@@ -358,8 +358,8 @@ export default function Dropbox() {
                 source: "dropbox",
                 url: f.link,
                 id: `${f.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
-              selectedSubSection: undefined, // Match FileItem interface
-            } as FileItem; // Explicitly cast to FileItem
+                selectedSubSection: undefined, // Match FileItem interface
+              } as FileItem; // Explicitly cast to FileItem
             } catch (err) {
               console.error(`Error fetching Dropbox file ${f.name}:`, err);
               return null;
@@ -416,7 +416,7 @@ export default function Dropbox() {
   };
 
   // Select a format for conversion
- const selectFormat = (index: number, format: string, subSection: string) => {
+  const selectFormat = (index: number, format: string, subSection: string) => {
     setCompressError({});
     const ext = selectedFiles[index].file.name.split(".").pop()?.toLowerCase() ?? "";
     if (subSection === "compressor" && !COMPRESSIBLE_FORMATS.includes(ext)) {
@@ -432,8 +432,9 @@ export default function Dropbox() {
     updated[index].showMenu = false;
     // When compressor, save selectedQuality as 90/70/50 for backend
     if (subSection === "compressor") {
-      const val = parseInt(format.replace("quality ", ""), 10);
-      updated[index].selectedQuality = val;
+       const match = format.match(/\d+/g);
+  const val = match && match.length ? parseInt(match[0], 10) : undefined;
+  updated[index].selectedQuality = val;
     }
     setSelectedFiles(updated);
   };
@@ -563,7 +564,7 @@ export default function Dropbox() {
   };
 
   // Handle file download
- const handleDownload = async (url: string, name: string, index: number) => {
+  const handleDownload = async (url: string, name: string, index: number) => {
     setConvertedFiles((prev) =>
       prev.map((file, i) => (i === index ? { ...file, loading: true } : file))
     );
@@ -677,7 +678,9 @@ export default function Dropbox() {
                       )}
                       <button
                         className="text-gray-400 hover:text-red-500 transition text-xl"
-                        onClick={() => removeFile(index)}
+                        onClick={() =>
+                          setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+                        }
                         disabled={convertedFile?.converting}
                       >
                         ×
@@ -731,10 +734,17 @@ export default function Dropbox() {
         </h1>
         <button
           onClick={handleConvert}
-          disabled={isConverting || selectedFiles.length === 0}
+          disabled={
+            isConverting ||
+            selectedFiles.length === 0 ||
+            selectedFiles.some(
+              f =>
+                f.selectedSubSection === "compressor" &&
+                (!f.selectedQuality || !f.selectedFormat)
+            )
+          }
           className={`flex items-center gap-2 bg-red-400 text-white px-5 py-2 rounded-md text-[15px] font-semibold mt-2 hover:bg-red-500 transition ${isConverting || selectedFiles.length === 0 ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-        >
+            }`}>
           <FiArrowRight className="text-[16px]" />
           {isConverting ? "Converting..." : "Convert files"}
         </button>
