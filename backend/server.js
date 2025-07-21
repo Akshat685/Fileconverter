@@ -473,7 +473,6 @@ async function convertCompressor(inputPath, outputPath, format, quality = 80) {
       "Image compression is only supported for JPG, PNG, GIF, or SVG files."
     );
   }
-  // Map quality
   const jpgQuality = quality.toString();
   let pngQualityRange = "60-80";
   if (quality === 90) pngQualityRange = "80-90";
@@ -491,13 +490,16 @@ async function convertCompressor(inputPath, outputPath, format, quality = 80) {
       { svg: { engine: "svgo", command: "--multipass" } },
       { gif: { engine: "gifsicle", command: ["--optimize"] } },
       function (error, completed, statistic) {
-        if (error) return reject(new Error("Compression error: " + error));
+        if (error) {
+          console.error("Compression error details:", error);
+          return reject(new Error(`Compression error: ${error.message || error}`));
+        }
         if (statistic && statistic.path_out_new) {
           fsPromises.rename(statistic.path_out_new, outputPath)
             .then(() => resolve())
             .catch(reject);
         } else {
-          reject(new Error("Image compression failed."));
+          reject(new Error("Image compression failed: No output file generated."));
         }
       }
     );
