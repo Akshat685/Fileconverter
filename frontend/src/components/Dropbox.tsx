@@ -21,6 +21,7 @@ interface FileItem {
   url?: string;
   id: string;
   selectedSubSection?: string;
+  selectedQuality?: number;
 }
 
 interface FormatOptions {
@@ -31,9 +32,9 @@ interface FormatOptions {
   };
   pdfs: {
     document: string[];
-    compressor: string[];
-    ebook: string[];
-    pdf_ebook: string[];
+    // compressor: string[];
+    // ebook: string[];
+    // pdf_ebook: string[];
     pdf_to_image: string[];
   };
   audio: {
@@ -58,6 +59,9 @@ interface ConvertedFile {
   converting: boolean; // Added to track conversion state
   originalId: string;
 }
+
+const COMPRESSIBLE_FORMATS = ["jpg", "jpeg", "png", "gif", "svg"];
+
 
 export default function Dropbox() {
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
@@ -145,14 +149,14 @@ export default function Dropbox() {
   const formatOptions: FormatOptions = {
     image: {
       image: ["GIF", "JPG", "PNG","TIFF", "WEBP"],
-      compressor: ["JPG", "PNG",],
+      compressor: ["Quality 90%", "Quality 70%", "Quality 50%"],
       pdf: ["PDF"],
     },
     pdfs: {
-      document: ["DOC", "DOCX", "HTML", "ODT", "PPT", "PPTX", "RTF", "TXT", "XLSX", "PDF"],
-      compressor: ["PDF"],
-      ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
-      pdf_ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
+      document: ["DOCX"],
+      // compressor: ["PDF"],
+      // ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
+      // pdf_ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
       pdf_to_image: ["JPG", "PNG", "GIF"],
     },
     audio: {
@@ -169,6 +173,8 @@ export default function Dropbox() {
     archive: ["ZIP", "7Z"],
     ebook: ["EPUB", "MOBI", "PDF", "AZW3"],
   };
+
+   const [compressError, setCompressError] = useState<{ [id: string]: string }>({});
 
   // Trigger Google Drive Picker
   // const handleGoogleDriveUpload = () => {
@@ -374,6 +380,7 @@ export default function Dropbox() {
 
   // Toggle format selection menu
   const toggleMenu = (index: number) => {
+    setCompressError({});
     setSelectedFiles((prev) =>
       prev.map((item, i) =>
         i === index ? { ...item, showMenu: !item.showMenu } : { ...item, showMenu: false }
@@ -389,17 +396,45 @@ export default function Dropbox() {
 
   // Select a subsection for format options
   const selectSubSection = (index: number, subSection: string) => {
+    setCompressError({});
     const updated = [...selectedFiles];
     updated[index].selectedSubSection = subSection;
     updated[index].selectedFormat = "";
+    if (subSection === "compressor") {
+      const ext = updated[index].file.name.split(".").pop()?.toLowerCase() || "";
+      if (!COMPRESSIBLE_FORMATS.includes(ext)) {
+        setCompressError((err) => ({
+          ...err,
+          [updated[index].id]:
+            "Compression is only supported for JPG, PNG, GIF, or SVG files.",
+        }));
+      }
+      updated[index].selectedQuality = undefined;
+    }
     setSelectedFiles(updated);
+
   };
 
   // Select a format for conversion
-  const selectFormat = (index: number, format: string, subSection: string) => {
+ const selectFormat = (index: number, format: string, subSection: string) => {
+    setCompressError({});
+    const ext = selectedFiles[index].file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (subSection === "compressor" && !COMPRESSIBLE_FORMATS.includes(ext)) {
+      setCompressError((err) => ({
+        ...err,
+        [selectedFiles[index].id]:
+          "Compression is only supported for JPG, PNG, GIF, or SVG files.",
+      }));
+      return;
+    }
     const updated = [...selectedFiles];
     updated[index].selectedFormat = `${subSection}:${format}`;
     updated[index].showMenu = false;
+    // When compressor, save selectedQuality as 90/70/50 for backend
+    if (subSection === "compressor") {
+      const val = parseInt(format.replace("quality ", ""), 10);
+      updated[index].selectedQuality = val;
+    }
     setSelectedFiles(updated);
   };
 
@@ -410,36 +445,48 @@ export default function Dropbox() {
       setErrorMessage("No files selected for conversion.");
       return;
     }
-
     if (selectedFiles.some((item) => !item.selectedFormat)) {
       setErrorMessage("Please select a format for all files.");
       return;
     }
-
     if (selectedFiles.length > 5) {
       setErrorMessage("Maximum 5 files allowed.");
       return;
     }
-
-    console.log("Starting conversion for files:", selectedFiles.map((item) => ({
-      name: item.file.name,
-      id: item.id,
-      format: item.selectedFormat,
-    })));
-
     const formData = new FormData();
     const formats = selectedFiles.map((item) => {
       const [subSection, target] = item.selectedFormat.split(":");
+      let type = item.section;
+      if (subSection === "compressor") type = "compressor";
+      const ext = item.file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (
+        subSection === "compressor" &&
+        !COMPRESSIBLE_FORMATS.includes(ext)
+      ) {
+        setErrorMessage(
+          "Image compression is only supported for JPG, PNG, GIF, or SVG files."
+        );
+        throw new Error("Compressor format not supported.");
+      }
+      // Quality (for compressor only)
+      let q: number | undefined;
+      if (subSection === "compressor") {
+        q = item.selectedQuality;
+        if (!q) {
+          setErrorMessage("Choose a quality (90, 70, or 50) for image compression.");
+          throw new Error("No quality chosen for compression.");
+        }
+      }
       return {
         name: item.file.name,
-        target: target.toLowerCase(),
-        type: item.section,
+        target: subSection === "compressor" ? ext : (target?.toLowerCase() || ""),
+        type,
         subSection,
         id: item.id,
+        quality: q,
       };
     });
 
-    // Initialize converting state for all files
     setConvertedFiles(
       formats.map((format) => ({
         name: format.name,
@@ -449,12 +496,10 @@ export default function Dropbox() {
         originalId: format.id,
       }))
     );
-
     selectedFiles.forEach((item) => {
       formData.append("files", item.file);
     });
     formData.append("formats", JSON.stringify(formats));
-
     setIsConverting(true);
     setErrorMessage(null);
 
@@ -464,57 +509,46 @@ export default function Dropbox() {
         controller.abort(new Error("Conversion request timed out after 300 seconds"));
       }, 300000);
 
-      const res = await fetch(`${API_URL}/api/convert`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/convert`, {
         method: "POST",
         body: formData,
         signal: controller.signal,
       });
-
       clearTimeout(timeoutId);
-
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || `Conversion failed with status ${res.status}`);
       }
-
       const data = await res.json();
-      console.log("Conversion response:", data);
-
       const converted = await Promise.all(
         data.files.map(async (file: { name: string; path: string }, index: number) => {
           try {
-            console.log(`Fetching converted file: ${file.name} from ${API_URL}${file.path}`);
-            const fileRes = await fetch(`${API_URL}${file.path}`);
-            if (!fileRes.ok) {
-              throw new Error(`Failed to fetch converted file: ${file.name}, status: ${fileRes.status}`);
-            }
+            const fileRes = await fetch(
+              `${import.meta.env.VITE_API_URL}${file.path}`
+            );
+            if (!fileRes.ok)
+              throw new Error(
+                `Failed to fetch converted file: ${file.name}, status: ${fileRes.status}`
+              );
             const blob = await fileRes.blob();
             const url = window.URL.createObjectURL(blob);
             const originalId = formats[index].id;
             return { name: file.name, url, loading: false, converting: false, originalId };
           } catch (err) {
-            console.error(`Error fetching file ${file.name}:`, err);
             return null;
           }
         })
       );
-
       const validConverted = converted.filter((file): file is ConvertedFile => file !== null);
-      console.log("Converted files set:", validConverted);
       setConvertedFiles(validConverted);
       if (converted.some((file) => file === null)) {
         setErrorMessage("Some files failed to convert or download. Please try again.");
       } else if (validConverted.length === 0) {
         setErrorMessage("No files were converted successfully. Check file formats and try again.");
-      } else {
-        console.log("Conversion successful, files:", validConverted);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error during conversion";
-      console.error("Conversion error details:", {
-        message: errorMessage,
-        ...(err instanceof Error && { name: err.name, stack: err.stack }),
-      });
+      const errorMessage =
+        err instanceof Error ? err.message : "Unknown error during conversion";
       setErrorMessage(
         errorMessage.includes("timeout")
           ? "Conversion timed out after 120 seconds. Try smaller files or check server status."
@@ -529,7 +563,7 @@ export default function Dropbox() {
   };
 
   // Handle file download
-  const handleDownload = async (url: string, name: string, index: number) => {
+ const handleDownload = async (url: string, name: string, index: number) => {
     setConvertedFiles((prev) =>
       prev.map((file, i) => (i === index ? { ...file, loading: true } : file))
     );
@@ -538,10 +572,6 @@ export default function Dropbox() {
       a.href = url;
       a.download = name;
       a.click();
-      console.log(`Downloaded file: ${name}`);
-    } catch (err) {
-      console.error(`Error downloading file ${name}:`, err);
-      setErrorMessage(`Failed to download ${name}. Please try again.`);
     } finally {
       setConvertedFiles((prev) =>
         prev.map((file, i) => (i === index ? { ...file, loading: false } : file))
@@ -598,6 +628,7 @@ export default function Dropbox() {
           <div className="mt-6 w-full max-w-2xl space-y-3">
             {selectedFiles.map((item, index) => {
               const convertedFile = convertedFiles.find((file) => file.originalId === item.id);
+              const ext = item.file.name.split(".").pop()?.toLowerCase() ?? "";
               console.log(
                 `Checking match for ${item.file.name} (ID: ${item.id}):`,
                 convertedFile ? convertedFile.name : "No match"

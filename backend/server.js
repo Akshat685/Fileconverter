@@ -15,6 +15,8 @@ const ffmpeg = require('fluent-ffmpeg');
 const sharp = require('sharp');
 const { fromPath } = require('pdf2pic');
 const sevenZip = require('node-7z');
+const compressImages = require("compress-images"); // npm i compress-images
+const SUPPORTED_COMPRESS_FORMATS = ["jpg", "jpeg", "png", "gif", "svg"];
 
 const execPromise = util.promisify(exec);
 
@@ -464,17 +466,42 @@ async function convertEbook(inputPath, outputPath, format) {
   });
 }
 
-async function convertCompressor(inputPath, outputPath, format) {
-  if (format === 'svg') {
-    await converter.compressSvg({ input: inputPath, output: outputPath });
-  } else if (['jpg', 'png'].includes(format)) {
-    await sharp(inputPath)
-      .toFormat(format, { quality: 80 })
-      .toFile(outputPath);
-    console.log(`Image compression completed: ${outputPath}`);
-  } else {
-    throw new Error(`Unsupported compressor output format: ${format}`);
+async function convertCompressor(inputPath, outputPath, format, quality = 80) {
+  format = format.toLowerCase();
+  if (!SUPPORTED_COMPRESS_FORMATS.includes(format)) {
+    throw new Error(
+      "Image compression is only supported for JPG, PNG, GIF, or SVG files."
+    );
   }
+  // Map quality
+  const jpgQuality = quality.toString();
+  let pngQualityRange = "60-80";
+  if (quality === 90) pngQualityRange = "80-90";
+  else if (quality === 70) pngQualityRange = "60-80";
+  else if (quality === 50) pngQualityRange = "40-60";
+
+  return new Promise((resolve, reject) => {
+    compressImages(
+      inputPath,
+      path.dirname(outputPath) + "/",
+      { compress_force: false, statistic: true, autoupdate: true },
+      false,
+      { jpg: { engine: "mozjpeg", command: ["-quality", jpgQuality] } },
+      { png: { engine: "pngquant", command: [`--quality=${pngQualityRange}`] } },
+      { svg: { engine: "svgo", command: "--multipass" } },
+      { gif: { engine: "gifsicle", command: ["--optimize"] } },
+      function (error, completed, statistic) {
+        if (error) return reject(new Error("Compression error: " + error));
+        if (statistic && statistic.path_out_new) {
+          fsPromises.rename(statistic.path_out_new, outputPath)
+            .then(() => resolve())
+            .catch(reject);
+        } else {
+          reject(new Error("Image compression failed."));
+        }
+      }
+    );
+  });
 }
 
 // Conversion route
@@ -584,6 +611,16 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
             break;
           case 'ebook':
             await convertEbook(inputPath, outputPath, outputExt);
+            break;
+          case "compressor":
+            const compressorQuality =
+              typeof formatInfo.quality === "number" ? formatInfo.quality : 80;
+            if (!SUPPORTED_COMPRESS_FORMATS.includes(outputExt)) {
+              throw new Error(
+                "Image compression is only supported for JPG, PNG, GIF, or SVG files."
+              );
+            }
+            await convertCompressor(inputPath, outputPath, outputExt, compressorQuality);
             break;
           default:
             throw new Error(`Unsupported conversion type: ${conversionType}`);

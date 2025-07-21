@@ -61,11 +61,11 @@ const Heading: React.FC<HeadingProps> = ({ selectedConverter, description }) => 
   };
 
   return (
-    <div className="text-center py-5">
-      <h1 className="text-[48px] font-[700] text-[#ec2d3f] mb-4">
+    <div className="text-center py-4 sm:py-5 lg:py-6">
+      <h1 className="text-3xl sm:text-4xl lg:text-[48px] font-bold text-[#ec2d3f] mb-2 sm:mb-3 lg:mb-4">
         {getHeadingText()}
       </h1>
-      <p className="text-[19px] font-[400] text-[#000]">
+      <p className="text-base sm:text-lg lg:text-[19px] font-normal text-[#000]">
         {getSubtitleText()}
       </p>
     </div>

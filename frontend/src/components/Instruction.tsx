@@ -1,4 +1,3 @@
-// src/components/Instructions.tsx
 import React from "react";
 
 interface InstructionsProps {
@@ -90,11 +89,11 @@ const Instructions: React.FC<InstructionsProps> = ({ converterType }) => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto bg-white px-8 py-10 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.15)]">
-      <h2 className="text-[28px] font-[600] text-center mb-6 text-black">
+    <div className="max-w-3xl mx-auto bg-white px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.15)]">
+      <h2 className="text-xl sm:text-2xl lg:text-[28px] font-semibold text-center mb-4 sm:mb-5 lg:mb-6 text-black">
         {getInstructionTitle()}
       </h2>
-      <ol className="space-y-3 text-[18px] text-[#1a1a1a]">
+      <ol className="space-y-2 sm:space-y-3 text-base sm:text-lg lg:text-[18px] text-[#1a1a1a]">
         {getInstructions().map((instruction, index) => (
           <li key={index}>
             {index + 1}. {instruction}

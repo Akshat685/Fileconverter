@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
 import Dropdownmenu from "./Dropdownmenu";
 
 const fileTypeMapping: Record<string, string[]> = {
@@ -18,6 +18,7 @@ const allTypes = Object.entries(fileTypeMapping).flatMap(([section, exts]) =>
 
 const Navbar = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filtered, setFiltered] = useState<{ ext: string; section: string }[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -58,38 +59,48 @@ const Navbar = () => {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-8 py-3  bg-white shadow-md">
-        <div className="flex items-center space-x-10 gap-5 ">
+      <nav className="sticky top-0 z-50 flex items-center justify-between sm:px-6 lg:px-8 py-3 bg-white shadow-md">
+        <div className="flex items-center justify-between w-full sm:w-auto">
           <img
             src="https://convertio.info/assets/img/logo.png"
             alt="Converter Logo"
-            className="w-30 h-7 object-contain"
+            className="w-24 sm:w-28 h-6 sm:h-7 object-contain"
           />
-          <div className="flex ml-10 space-x-6 text-lg gap-5 text-[15px]">
-            <a href="/" className="hover:text-red-600">Home</a>
-            <button
-              ref={toggleButtonRef}
-              onClick={() => setDropdownOpen(prev => !prev)}
-              className="flex items-center hover:text-red-600 focus:outline-none"
-            >
-              Converter <ChevronDown size={14} className="ml-1" />
-            </button>
-            <a href="/aboutpage" className="hover:text-red-600">About</a>
-            <a href="/blogpage" className="hover:text-red-600">Blogs</a>
-            <a href="/contactpage" className="hover:text-red-600">Contact</a>
-          </div>
+          <button
+            className="sm:hidden text-gray-600 hover:text-red-600 focus:outline-none"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
         </div>
 
-        <div className="relative">
+        <div
+          className={`${
+            mobileMenuOpen ? "flex" : "hidden"
+          } sm:flex flex-col sm:flex-row sm:items-left ml-10 gap-5 space-x-4 sm:space-x-5 lg:space-x-6 space-y-4 sm:space-y-0 absolute sm:static top-14 left-0 w-full sm:w-auto bg-white sm:bg-transparent px-4 sm:px-0 py-4 sm:py-0 border-b sm:border-none sm:shadow-none shadow-md`}
+        >
+          <a href="/" className="text-sm sm:text-[15px] hover:text-red-600">Home</a>
+          <button
+            ref={toggleButtonRef}
+            onClick={() => setDropdownOpen(prev => !prev)}
+            className="flex items-center text-sm sm:text-[15px] hover:text-red-600 focus:outline-none"
+          >
+            Converter <ChevronDown size={14} className="ml-1" />
+          </button>
+          <a href="/aboutpage" className="text-sm sm:text-[15px] hover:text-red-600">About</a>
+          <a href="/blogpage" className="text-sm sm:text-[15px] hover:text-red-600">Blogs</a>
+          <a href="/contactpage" className="text-sm sm:text-[15px] hover:text-red-600">Contact</a>
+        </div>
+
+        <div className="hidden sm:block relative">
           <input
             ref={searchRef}
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             placeholder="Search converter..."
-            className="border-1 border-[#ced4da] p-2 pl-4 pr-8 py-1 text-md w-64 focus:outline-none  rounded-lg"
+            className="border border-[#ced4da] p-2 pl-4 pr-8 py-1 text-sm w-48 lg:w-64 focus:outline-none rounded-lg"
           />
-
           {searchTerm && (
             <button
               onClick={() => {
@@ -102,9 +113,8 @@ const Navbar = () => {
               ×
             </button>
           )}
-
           {filtered.length > 0 && (
-            <div className="absolute border-[#ced4da] top-full mt-1 w-full bg-white border rounded-md shadow-md z-50">
+            <div className="absolute top-full mt-1 w-full bg-white border border-[#ced4da] rounded-md shadow-md z-50">
               {filtered.map((item, idx) => (
                 <div
                   key={idx}
@@ -126,9 +136,9 @@ const Navbar = () => {
       {dropdownOpen && (
         <div
           ref={dropdownRef}
-          className="fixed top-[50px] left-0 w-full border-[#ced4da] bg-white shadow-md border-t z-[999] transition-all duration-300 ease-in-out"
+          className="fixed top-14 sm:top-[50px] left-0 w-full bg-white shadow-md border-t border-[#ced4da] z-[999] transition-all duration-300 ease-in-out"
         >
-          <div className="max-w-6xl mx-auto px-4 py-6">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <Dropdownmenu closeDropdown={() => setDropdownOpen(false)} />
           </div>
         </div>
