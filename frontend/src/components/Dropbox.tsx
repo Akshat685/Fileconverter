@@ -159,7 +159,7 @@ export default function Dropbox() {
       audio: ["FLAC","OGG", "OPUS", "WAV",],
     },
     video: {
-      video: ["3G2", "3GP", "AVI", "FLV", "MKV", "MOV", "MPG", "OGV", "WEBM", "WMV"]
+      video: [ "AVI", "FLV",]
       // audio: ["FLAC","OGG", "OPUS", "WAV", ],
       // device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
       // compressor: ["MP4"],
@@ -352,7 +352,8 @@ export default function Dropbox() {
                 source: "dropbox",
                 url: f.link,
                 id: `${f.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
-              };
+              selectedSubSection: undefined, // Match FileItem interface
+            } as FileItem; // Explicitly cast to FileItem
             } catch (err) {
               console.error(`Error fetching Dropbox file ${f.name}:`, err);
               return null;
