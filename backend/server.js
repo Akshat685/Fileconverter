@@ -473,37 +473,31 @@ async function convertCompressor(inputPath, outputPath, format, quality = 80) {
       "Image compression is only supported for JPG, PNG, GIF, or SVG files."
     );
   }
-  const jpgQuality = quality.toString();
-  let pngQualityRange = "60-80";
-  if (quality === 90) pngQualityRange = "80-90";
-  else if (quality === 70) pngQualityRange = "60-80";
-  else if (quality === 50) pngQualityRange = "40-60";
 
-  return new Promise((resolve, reject) => {
-    compressImages(
-      inputPath,
-      path.dirname(outputPath) + "/",
-      { compress_force: false, statistic: true, autoupdate: true },
-      false,
-      { jpg: { engine: "mozjpeg", command: ["-quality", jpgQuality] } },
-      { png: { engine: "pngquant", command: [`--quality=${pngQualityRange}`] } },
-      { svg: { engine: "svgo", command: "--multipass" } },
-      { gif: { engine: "gifsicle", command: ["--optimize"] } },
-      function (error, completed, statistic) {
-        if (error) {
-          console.error("Compression error details:", error);
-          return reject(new Error(`Compression error: ${error.message || error}`));
-        }
-        if (statistic && statistic.path_out_new) {
-          fsPromises.rename(statistic.path_out_new, outputPath)
-            .then(() => resolve())
-            .catch(reject);
-        } else {
-          reject(new Error("Image compression failed: No output file generated."));
-        }
-      }
-    );
-  });
+  try {
+    const image = sharp(inputPath);
+    switch (format) {
+      case "jpg":
+      case "jpeg":
+        await image.jpeg({ quality }).toFile(outputPath);
+        break;
+      case "png":
+        await image.png({ quality }).toFile(outputPath);
+        break;
+      case "gif":
+        await image.gif().toFile(outputPath);
+        break;
+      case "svg":
+        await fsPromises.copyFile(inputPath, outputPath); // Minimal compression for SVG
+        break;
+      default:
+        throw new Error(`Unsupported format for compression: ${format}`);
+    }
+    console.log(`Compression completed with sharp: ${outputPath}`);
+  } catch (err) {
+    console.error(`Compression error with sharp: ${err.message}`);
+    throw new Error(`Failed to compress image: ${err.message}`);
+  }
 }
 
 // Conversion route
