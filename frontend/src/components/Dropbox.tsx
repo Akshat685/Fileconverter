@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { FaFolderOpen, FaDropbox, FaGoogleDrive } from "react-icons/fa";
+import { FaFolderOpen, FaDropbox } from "react-icons/fa";
+// import { FaGoogleDrive } from "react-icons/fa";
 import { FiArrowRight, FiDownload } from "react-icons/fi";
 
 declare global {
@@ -39,11 +40,11 @@ interface FormatOptions {
     audio: string[];
   };
   video: {
-    audio: string[];
-    device: string[];
     video: string[];
-    compressor: string[];
-    webservice: string[];
+    // audio: string[];
+    // device: string[];
+    // compressor: string[];
+    // webservice: string[];
   };
   document: string[];
   archive: string[];
@@ -70,7 +71,6 @@ export default function Dropbox() {
   const [isConverting, setIsConverting] = useState(false);
   const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   // Load Google APIs and Dropbox SDK
   useEffect(() => {
@@ -144,8 +144,8 @@ export default function Dropbox() {
   // Format options configuration
   const formatOptions: FormatOptions = {
     image: {
-      image: ["BMP", "EPS", "GIF", "ICO", "JPG", "PNG", "SVG", "TGA", "TIFF", "WBMP", "WEBP"],
-      compressor: ["JPG", "PNG", "SVG"],
+      image: ["GIF", "JPG", "PNG","TIFF", "WEBP"],
+      compressor: ["JPG", "PNG",],
       pdf: ["PDF"],
     },
     pdfs: {
@@ -156,14 +156,14 @@ export default function Dropbox() {
       pdf_to_image: ["JPG", "PNG", "GIF"],
     },
     audio: {
-      audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "OGG", "OPUS", "WAV", "WMA", "3G2"],
+      audio: ["FLAC","OGG", "OPUS", "WAV",],
     },
     video: {
-      video: ["3G2", "3GP", "AVI", "FLV", "MKV", "MOV", "MPG", "OGV", "WEBM", "WMV"],
-      audio: ["AAC", "AIFF", "FLAC", "M4V", "MMF", "MP3", "OGG", "OPUS", "WAV", "WMA", "3G2"],
-      device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
-      compressor: ["MP4"],
-      webservice: ["DAILYMOTION", "FACEBOOK", "INSTAGRAM", "TELEGRAM", "TWITCH", "TWITTER", "VIBER", "VIMEO", "WHATSAPP", "YOUTUBE"],
+      video: ["3G2", "3GP", "AVI", "FLV", "MKV", "MOV", "MPG", "OGV", "WEBM", "WMV"]
+      // audio: ["FLAC","OGG", "OPUS", "WAV", ],
+      // device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
+      // compressor: ["MP4"],
+      // webservice: ["DAILYMOTION", "FACEBOOK", "INSTAGRAM", "TELEGRAM", "TWITCH", "TWITTER", "VIBER", "VIMEO", "WHATSAPP", "YOUTUBE"],
     },
     document: ["DOCX", "PDF", "TXT", "RTF", "ODT"],
     archive: ["ZIP", "7Z"],
@@ -171,13 +171,13 @@ export default function Dropbox() {
   };
 
   // Trigger Google Drive Picker
-  const handleGoogleDriveUpload = () => {
-    if (!pickerLoaded.current) {
-      setErrorMessage("Google Picker is not ready. Please try again shortly.");
-      return;
-    }
-    triggerGoogleSignIn();
-  };
+  // const handleGoogleDriveUpload = () => {
+  //   if (!pickerLoaded.current) {
+  //     setErrorMessage("Google Picker is not ready. Please try again shortly.");
+  //     return;
+  //   }
+  //   triggerGoogleSignIn();
+  // };
 
   // Initialize Google Sign-In
   const triggerGoogleSignIn = () => {
@@ -192,7 +192,6 @@ export default function Dropbox() {
       callback: (response: any) => {
         if (response?.access_token) {
           console.log("Received access token:", response.access_token);
-          setAccessToken(response.access_token);
           createGooglePicker(response.access_token);
         } else {
           console.error("No access token returned:", response);
@@ -206,25 +205,25 @@ export default function Dropbox() {
 
   // Create Google Picker
   const createGooglePicker = (token: string) => {
-  if (pickerLoaded.current && window.google?.picker && typeof window.google.picker.PickerBuilder === "function") {
-    try {
-      const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
-      const picker = new window.google.picker.PickerBuilder()
-        .addView(view)
-        .setOAuthToken(token)
-        .setDeveloperKey(GOOGLE_API_KEY)
-        .setOrigin(window.location.origin) // Use dynamic origin
-        .setCallback((data: any) => handlePickerResponse(data, token))
-        .build();
-      picker.setVisible(true);
-    } catch (err) {
-      console.error("Failed to create Google Picker:", err);
-      setErrorMessage("Failed to initialize Google Picker. Please try again.");
+    if (pickerLoaded.current && window.google?.picker && typeof window.google.picker.PickerBuilder === "function") {
+      try {
+        const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
+        const picker = new window.google.picker.PickerBuilder()
+          .addView(view)
+          .setOAuthToken(token)
+          .setDeveloperKey(GOOGLE_API_KEY)
+          .setOrigin(window.location.origin) // Use dynamic origin
+          .setCallback((data: any) => handlePickerResponse(data, token))
+          .build();
+        picker.setVisible(true);
+      } catch (err) {
+        console.error("Failed to create Google Picker:", err);
+        setErrorMessage("Failed to initialize Google Picker. Please try again.");
+      }
+    } else {
+      setErrorMessage("Google Picker API not loaded. Please try again.");
     }
-  } else {
-    setErrorMessage("Google Picker API not loaded. Please try again.");
-  }
-};
+  };
 
   // Handle Google Picker response
   const handlePickerResponse = async (data: any, token: string) => {
@@ -255,7 +254,6 @@ export default function Dropbox() {
               console.error("API error details:", errorData);
               if (response.status === 401) {
                 setErrorMessage("Unauthorized access. Please sign in again.");
-                setAccessToken(null);
                 triggerGoogleSignIn();
                 return null;
               }
@@ -462,8 +460,8 @@ export default function Dropbox() {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        controller.abort(new Error("Conversion request timed out after 120 seconds"));
-      }, 120000);
+        controller.abort(new Error("Conversion request timed out after 300 seconds"));
+      }, 300000);
 
       const res = await fetch(`${API_URL}/api/convert`, {
         method: "POST",
@@ -511,16 +509,15 @@ export default function Dropbox() {
         console.log("Conversion successful, files:", validConverted);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error during conversion";
+      const errorMessage = err instanceof Error ? err.message : "Unknown error during conversion";
       console.error("Conversion error details:", {
-        message: msg,
-        name: err.name,
-        stack: err.stack,
+        message: errorMessage,
+        ...(err instanceof Error && { name: err.name, stack: err.stack }),
       });
       setErrorMessage(
-        msg.includes("timeout")
+        errorMessage.includes("timeout")
           ? "Conversion timed out after 120 seconds. Try smaller files or check server status."
-          : `Conversion failed: ${msg}`
+          : `Conversion failed: ${errorMessage}`
       );
       setConvertedFiles((prev) =>
         prev.map((file) => ({ ...file, converting: false }))
@@ -551,6 +548,16 @@ export default function Dropbox() {
     }
   };
 
+  // Helper function to get format options for current subsection
+  const getCurrentFormatOptions = (section: keyof FormatOptions, subSection?: string): string[] => {
+    const sectionOptions = formatOptions[section];
+    if (Array.isArray(sectionOptions)) {
+      return sectionOptions;
+    }
+    const currentSubSection = subSection || Object.keys(sectionOptions)[0];
+    return sectionOptions[currentSubSection as keyof typeof sectionOptions] || [];
+  };
+
   return (
     <div>
       <div className="flex items-center justify-center">
@@ -575,11 +582,11 @@ export default function Dropbox() {
               title="Upload from Dropbox"
               className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
             />
-            <FaGoogleDrive
+            {/* <FaGoogleDrive
               onClick={handleGoogleDriveUpload}
               title="Upload from Google Drive"
               className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
-            />
+            /> */}
           </div>
           <div className="dropboxfoot mt-3 text-sm text-gray-400">
             100 MB maximum file size and up to 5 files.
@@ -661,9 +668,7 @@ export default function Dropbox() {
                       </div>
                       <div className="flex-1 pl-4">
                         <div className="grid grid-cols-2 gap-2">
-                          {formatOptions[item.section][
-                            item.selectedSubSection || Object.keys(formatOptions[item.section])[0]
-                          ].map((format) => (
+                          {getCurrentFormatOptions(item.section, item.selectedSubSection).map((format: string) => (
                             <button
                               key={format}
                               className="bg-[#333] hover:bg-red-600 transition px-3 py-2 rounded text-white text-xs"
