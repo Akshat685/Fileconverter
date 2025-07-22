@@ -32,7 +32,7 @@ interface FormatOptions {
   };
   pdfs: {
     document: string[];
-    // compressor: string[];
+    compressor: string[];
     // ebook: string[];
     // pdf_ebook: string[];
     pdf_to_image: string[];
@@ -154,10 +154,10 @@ export default function Dropbox() {
     },
     pdfs: {
       document: ["DOCX"],
-      // compressor: ["PDF"],
+      compressor: ["Quality 90%", "Quality 70%", "Quality 50%"],
+      pdf_to_image: ["JPG", "PNG", "GIF"],
       // ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
       // pdf_ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
-      pdf_to_image: ["JPG", "PNG", "GIF"],
     },
     audio: {
       audio: ["FLAC", "OGG", "OPUS", "WAV",],
@@ -402,39 +402,50 @@ export default function Dropbox() {
     updated[index].selectedFormat = "";
     if (subSection === "compressor") {
       const ext = updated[index].file.name.split(".").pop()?.toLowerCase() || "";
-      if (!COMPRESSIBLE_FORMATS.includes(ext)) {
+      if (updated[index].section === "image" && !COMPRESSIBLE_FORMATS.includes(ext)) {
         setCompressError((err) => ({
           ...err,
           [updated[index].id]:
             "Compression is only supported for JPG, PNG, GIF, or SVG files.",
         }));
+      } else if (updated[index].section === "pdfs" && ext !== "pdf") {
+        setCompressError((err) => ({
+          ...err,
+          [updated[index].id]: "PDF compression is only supported for PDF files.",
+        }));
       }
       updated[index].selectedQuality = undefined;
     }
     setSelectedFiles(updated);
-
   };
 
   // Select a format for conversion
   const selectFormat = (index: number, format: string, subSection: string) => {
     setCompressError({});
     const ext = selectedFiles[index].file.name.split(".").pop()?.toLowerCase() ?? "";
-    if (subSection === "compressor" && !COMPRESSIBLE_FORMATS.includes(ext)) {
-      setCompressError((err) => ({
-        ...err,
-        [selectedFiles[index].id]:
-          "Compression is only supported for JPG, PNG, GIF, or SVG files.",
-      }));
-      return;
+    if (subSection === "compressor") {
+      if (selectedFiles[index].section === "image" && !COMPRESSIBLE_FORMATS.includes(ext)) {
+        setCompressError((err) => ({
+          ...err,
+          [selectedFiles[index].id]:
+            "Compression is only supported for JPG, PNG, GIF, or SVG files.",
+        }));
+        return;
+      } else if (selectedFiles[index].section === "pdfs" && ext !== "pdf") {
+        setCompressError((err) => ({
+          ...err,
+          [selectedFiles[index].id]: "PDF compression is only supported for PDF files.",
+        }));
+        return;
+      }
     }
     const updated = [...selectedFiles];
     updated[index].selectedFormat = `${subSection}:${format}`;
     updated[index].showMenu = false;
-    // When compressor, save selectedQuality as 90/70/50 for backend
     if (subSection === "compressor") {
-       const match = format.match(/\d+/g);
-  const val = match && match.length ? parseInt(match[0], 10) : undefined;
-  updated[index].selectedQuality = val;
+      const match = format.match(/\d+/g);
+      const val = match && match.length ? parseInt(match[0], 10) : undefined;
+      updated[index].selectedQuality = val;
     }
     setSelectedFiles(updated);
   };
@@ -458,23 +469,25 @@ export default function Dropbox() {
     const formats = selectedFiles.map((item) => {
       const [subSection, target] = item.selectedFormat.split(":");
       let type = item.section;
-      if (subSection === "compressor") type = "compressor";
+      if (subSection === "compressor") {
+        type = item.section === "pdfs" ? "pdf_compressor" : "compressor";
+      }
       const ext = item.file.name.split(".").pop()?.toLowerCase() ?? "";
-      if (
-        subSection === "compressor" &&
-        !COMPRESSIBLE_FORMATS.includes(ext)
-      ) {
+      if (subSection === "compressor" && item.section === "image" && !COMPRESSIBLE_FORMATS.includes(ext)) {
         setErrorMessage(
           "Image compression is only supported for JPG, PNG, GIF, or SVG files."
         );
         throw new Error("Compressor format not supported.");
       }
-      // Quality (for compressor only)
+      if (subSection === "compressor" && item.section === "pdfs" && ext !== "pdf") {
+        setErrorMessage("PDF compression is only supported for PDF files.");
+        throw new Error("PDF compressor format not supported.");
+      }
       let q: number | undefined;
       if (subSection === "compressor") {
         q = item.selectedQuality;
         if (!q) {
-          setErrorMessage("Choose a quality (90, 70, or 50) for image compression.");
+          setErrorMessage("Choose a quality (90, 70, or 50) for compression.");
           throw new Error("No quality chosen for compression.");
         }
       }

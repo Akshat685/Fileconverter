@@ -17,8 +17,9 @@ const { fromPath } = require('pdf2pic');
 const sevenZip = require('node-7z');
 const compressImages = require("compress-images"); // npm i compress-images
 const SUPPORTED_COMPRESS_FORMATS = ["jpg", "jpeg", "png", "gif", "svg"];
-
+const SUPPORTED_PDF_COMPRESS_FORMATS = ["pdf"];
 const execPromise = util.promisify(exec);
+const pdfCompress = require('compress-pdf');
 
 // Determine the correct imgToPDF function
 let imgToPDF = imgToPDFModule;
@@ -500,6 +501,32 @@ async function convertCompressor(inputPath, outputPath, format, quality = 80) {
   }
 }
 
+async function convertPdfCompressor(inputPath, outputPath, format, quality = 80) {
+  format = format.toLowerCase();
+  if (!SUPPORTED_PDF_COMPRESS_FORMATS.includes(format)) {
+    throw new Error("PDF compression is only supported for PDF files.");
+  }
+
+  try {
+    // Map quality to compress-pdf resolution settings
+    let resolution;
+    if (quality >= 90) {
+      resolution = "prepress"; // High quality, minimal compression
+    } else if (quality >= 70) {
+      resolution = "printer"; // Medium quality
+    } else {
+      resolution = "screen"; // Low quality, maximum compression
+    }
+
+    const compressedBuffer = await compress(inputPath, { resolution });
+    await fsPromises.writeFile(outputPath, compressedBuffer);
+    console.log(`PDF compression completed: ${outputPath}`);
+  } catch (err) {
+    console.error(`PDF compression error: ${err.message}`);
+    throw new Error(`Failed to compress PDF: ${err.message}`);
+  }
+}
+
 // Conversion route
 app.post('/api/convert', upload.array('files', 5), async (req, res) => {
   console.log('Received /api/convert request', {
@@ -542,11 +569,13 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       if (!formatInfo.type || !outputExt) {
         throw new Error('Invalid format information: type and target are required.');
       }
-      if (!Object.keys(supportedFormats).includes(conversionType)) {
-        throw new Error(`Unsupported conversion type: ${conversionType}. Supported types: ${Object.keys(supportedFormats).join(', ')}`);
+      if (!Object.keys(supportedFormats).includes(conversionType) && conversionType !== 'pdf_compressor') {
+        throw new Error(`Unsupported conversion type: ${conversionType}. Supported types: ${Object.keys(supportedFormats).join(', ')}, pdf_compressor`);
       }
-      if (!supportedFormats[conversionType].includes(outputExt)) {
-        throw new Error(`Unsupported output format: ${outputExt} for type ${conversionType}. Supported formats: ${supportedFormats[conversionType].join(', ')}`);
+      if (conversionType === 'pdf_compressor' && !SUPPORTED_PDF_COMPRESS_FORMATS.includes(outputExt)) {
+        throw new Error(`Unsupported output format for PDF compression: ${outputExt}. Supported formats: ${SUPPORTED_PDF_COMPRESS_FORMATS.join(', ')}`);
+      } else if (!supportedFormats[conversionType]?.includes(outputExt)) {
+        throw new Error(`Unsupported output format: ${outputExt} for type ${conversionType}. Supported formats: ${supportedFormats[conversionType]?.join(', ') || 'none'}`);
       }
       if (!allFormats.includes(inputExt)) {
         throw new Error(`Unsupported input format: ${inputExt}. Supported formats: ${allFormats.join(', ')}`);
@@ -565,7 +594,7 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       }
 
       // Validate input based on conversion type
-      if (conversionType === 'pdfs' && inputExt === 'pdf') {
+      if (['pdfs', 'pdf_compressor'].includes(conversionType) && inputExt === 'pdf') {
         const isValidPDF = await validatePDF(inputPath);
         if (!isValidPDF) {
           throw new Error(`Invalid or corrupted PDF file: ${file.originalname}`);
@@ -589,15 +618,19 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
           case 'image':
             await convertImage(inputPath, outputPath, outputExt);
             break;
-          case "compressor":
-            const compressorQuality =
-              typeof formatInfo.quality === "number" ? formatInfo.quality : 80;
+          case 'compressor':
+            const compressorQuality = typeof formatInfo.quality === 'number' ? formatInfo.quality : 80;
             if (!SUPPORTED_COMPRESS_FORMATS.includes(outputExt)) {
-              throw new Error(
-                "Image compression is only supported for JPG, PNG, GIF, or SVG files."
-              );
+              throw new Error("Image compression is only supported for JPG, PNG, GIF, or SVG files.");
             }
             await convertCompressor(inputPath, outputPath, outputExt, compressorQuality);
+            break;
+          case 'pdf_compressor':
+            const pdfCompressorQuality = typeof formatInfo.quality === 'number' ? formatInfo.quality : 80;
+            if (!SUPPORTED_PDF_COMPRESS_FORMATS.includes(outputExt)) {
+              throw new Error("PDF compression is only supported for PDF files.");
+            }
+            await convertPdfCompressor(inputPath, outputPath, outputExt, pdfCompressorQuality);
             break;
           case 'pdfs':
             await convertPdf(inputPath, outputPath, outputExt, file.originalname);
@@ -615,7 +648,6 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
           case 'ebook':
             await convertEbook(inputPath, outputPath, outputExt);
             break;
-          
           default:
             throw new Error(`Unsupported conversion type: ${conversionType}`);
         }

@@ -18,7 +18,7 @@ services:
         value: production
     preDeployCommand: |
       apt-get update && \
-      apt-get install -y ffmpeg libvips-dev poppler-utils graphicsmagick imagemagick calibre libpng-dev libjpeg-dev && \
+      apt-get install -y ffmpeg libvips-dev poppler-utils graphicsmagick imagemagick calibre libpng-dev libjpeg-dev ghostscript && \
       npm install -g mozjpeg pngquant-bin svgo gifsicle && \
       apt-get clean
     postDeployCommand: |
@@ -29,4 +29,5 @@ services:
       pngquant --version && \
       svgo --version && \
       gifsicle --version && \
+      gs --version && \
       npm ls image-to-pdf fluent-ffmpeg sharp pdf2pic node-7z multi-format-converter compress-images
