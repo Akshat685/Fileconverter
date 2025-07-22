@@ -204,6 +204,7 @@ const allFormats = [
 const supportedFormats = {
   image: ['bmp', 'eps', 'ico', 'svg', 'tga', 'wbmp', 'jpg', 'png', 'gif', 'tiff', 'webp', 'pdf'],
   compressor: ['jpg', 'png', 'svg'],
+  pdf_compressor: ['pdf'],  
   pdfs: ['jpg', 'png', 'gif', 'docx'],
   audio: ['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'm4v', 'mmf', '3g2'],
   video: ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv'],
