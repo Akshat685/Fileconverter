@@ -519,7 +519,7 @@ async function convertPdfCompressor(inputPath, outputPath, format, quality = 80)
       resolution = "screen"; // Low quality, maximum compression
     }
 
-    const compressedBuffer = await compress(inputPath, { resolution });
+    const compressedBuffer = await pdfCompress(inputPath, { resolution }); // Use pdfCompress instead of compress
     await fsPromises.writeFile(outputPath, compressedBuffer);
     console.log(`PDF compression completed: ${outputPath}`);
   } catch (err) {
