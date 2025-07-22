@@ -683,7 +683,7 @@ export default function Dropbox() {
                             )
                           }
                           disabled={convertedFile.loading}
-                          className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-1 rounded-md text-[14px] font-semibold hover:bg-yellow-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex items-center gap-2 bg-green-500 text-white px-4 py-1 rounded-md text-[14px] font-semibold hover:bg-yellow-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <FiDownload className="text-[16px]" />
                           {convertedFile.loading ? "Downloading..." : "Download"}

@@ -15,11 +15,24 @@ const ffmpeg = require('fluent-ffmpeg');
 const sharp = require('sharp');
 const { fromPath } = require('pdf2pic');
 const sevenZip = require('node-7z');
-const compressImages = require("compress-images"); // npm i compress-images
+const compressImages = require('compress-images');
 const SUPPORTED_COMPRESS_FORMATS = ["jpg", "jpeg", "png", "gif", "svg"];
 const SUPPORTED_PDF_COMPRESS_FORMATS = ["pdf"];
 const execPromise = util.promisify(exec);
-const pdfCompress = require('compress-pdf');
+
+// Load compress-pdf and handle default export
+let pdfCompress;
+try {
+  pdfCompress = require('compress-pdf');
+  // Handle case where compress-pdf has a default export
+  if (pdfCompress && typeof pdfCompress !== 'function' && pdfCompress.default) {
+    pdfCompress = pdfCompress.default;
+  }
+  console.log('pdfCompress loaded, type:', typeof pdfCompress);
+} catch (err) {
+  console.error('Failed to load compress-pdf module:', err.message);
+  pdfCompress = null; // Set to null to handle gracefully later
+}
 
 // Determine the correct imgToPDF function
 let imgToPDF = imgToPDFModule;
@@ -50,6 +63,7 @@ async function checkDependencies() {
     { name: 'libvips', command: 'vips --version' },
     { name: 'ffmpeg', command: 'ffmpeg -version' },
     { name: 'calibre', command: 'ebook-convert --version' },
+    { name: 'ghostscript', command: 'gs --version' },
   ];
   const results = {};
 
@@ -73,6 +87,7 @@ async function checkDependencies() {
     { name: 'pdf2pic', module: 'pdf2pic' },
     { name: 'node-7z', module: 'node-7z' },
     { name: 'multi-format-converter', module: 'multi-format-converter' },
+    { name: 'compress-pdf', module: 'compress-pdf' },
   ];
 
   for (const { name, module } of modules) {
@@ -118,6 +133,12 @@ async function checkDependencies() {
   }
   if (!dependencies['calibre']) {
     console.warn('Warning: calibre is not installed. Ebook conversions will fail.');
+  }
+  if (!dependencies['ghostscript']) {
+    console.error('Critical: ghostscript is not installed. PDF compression will fail.');
+  }
+  if (!dependencies['compress-pdf']) {
+    console.error('Critical: compress-pdf module is not installed. PDF compression will fail.');
   }
 })();
 
@@ -203,8 +224,8 @@ const allFormats = [
 
 const supportedFormats = {
   image: ['bmp', 'eps', 'ico', 'svg', 'tga', 'wbmp', 'jpg', 'png', 'gif', 'tiff', 'webp', 'pdf'],
-  compressor: ['jpg', 'png', 'svg'],
-  pdf_compressor: ['pdf'],  
+  compressor: ['jpg', 'jpeg', 'png', 'gif', 'svg'],
+  pdf_compressor: ['pdf'],
   pdfs: ['jpg', 'png', 'gif', 'docx'],
   audio: ['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'm4v', 'mmf', '3g2'],
   video: ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv'],
@@ -394,6 +415,8 @@ async function convertDocument(inputPath, outputPath, format) {
   const inputExt = path.extname(inputPath).toLowerCase().slice(1);
   const supportedDocumentFormats = ['docx', 'pdf'];
   if (['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'].includes(inputExt)) {
+
+
     if (format !== 'pdf') {
       throw new Error(`Image to ${format} conversion is not supported in document type. Use image type for PDF output.`);
     }
@@ -509,6 +532,17 @@ async function convertPdfCompressor(inputPath, outputPath, format, quality = 80)
   }
 
   try {
+    // Validate PDF input
+    const isValidPDF = await validatePDF(inputPath);
+    if (!isValidPDF) {
+      throw new Error(`Invalid or corrupted PDF file: ${inputPath}`);
+    }
+
+    // Check if pdfCompress is available
+    if (!pdfCompress || typeof pdfCompress !== 'function') {
+      throw new Error('pdfCompress is not a function. Ensure compress-pdf module is correctly installed and Ghostscript is available.');
+    }
+
     // Map quality to compress-pdf resolution settings
     let resolution;
     if (quality >= 90) {
@@ -519,7 +553,10 @@ async function convertPdfCompressor(inputPath, outputPath, format, quality = 80)
       resolution = "screen"; // Low quality, maximum compression
     }
 
-    const compressedBuffer = await pdfCompress(inputPath, { resolution }); // Use pdfCompress instead of compress
+    console.log(`Compressing PDF with resolution: ${resolution}, quality: ${quality}`);
+
+    // Use compress-pdf to compress the PDF
+    const compressedBuffer = await pdfCompress(inputPath, { resolution });
     await fsPromises.writeFile(outputPath, compressedBuffer);
     console.log(`PDF compression completed: ${outputPath}`);
   } catch (err) {
@@ -629,7 +666,7 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
           case 'pdf_compressor':
             const pdfCompressorQuality = typeof formatInfo.quality === 'number' ? formatInfo.quality : 80;
             if (!SUPPORTED_PDF_COMPRESS_FORMATS.includes(outputExt)) {
-              throw new Error("PDF compression is only supported for PDF files.");
+              throw new Error("PDF compression is only supported for PDF files. Got " + outputExt);
             }
             await convertPdfCompressor(inputPath, outputPath, outputExt, pdfCompressorQuality);
             break;
