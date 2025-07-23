@@ -30,4 +30,4 @@ services:
       svgo --version && \
       gifsicle --version && \
       gs --version && \
-      npm ls image-to-pdf fluent-ffmpeg sharp pdf2pic node-7z multi-format-converter compress-images compress-pdf
+      npm ls image-to-pdf fluent-ffmpeg sharp pdf2pic node-7z multi-format-converter compress-images pdf-lib
