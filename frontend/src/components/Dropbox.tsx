@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { FaFolderOpen, FaDropbox } from "react-icons/fa";
+import { FaFolderOpen, FaDropbox  , FaGoogleDrive} from "react-icons/fa";
 import { FiArrowRight, FiDownload } from "react-icons/fi";
 
 declare global {
@@ -83,10 +83,10 @@ export default function Dropbox() {
             pickerLoaded.current = true;
             console.log("Google API client initialized");
           } catch (err) {
-            console.error("Failed to init gapi client:", err);
+            // console.error("Failed to init gapi client:", err);
             setErrorMessage("Failed to initialize Google API client.");
           }
-        });
+        }); 
       };
       gapiScript.onerror = () => {
         setErrorMessage("Failed to load Google API script.");
@@ -155,6 +155,15 @@ export default function Dropbox() {
   };
 
   const [compressError, setCompressError] = useState<{ [id: string]: string }>({});
+
+  // Trigger Google Drive Picker
+   const handleGoogleDriveUpload = () => {
+    if (!pickerLoaded.current) {
+      setErrorMessage("Google Picker is not ready. Please try again shortly.");
+      return;
+    }
+    triggerGoogleSignIn();
+  };
 
   const triggerGoogleSignIn = () => {
     if (!window.google?.accounts?.oauth2) {
@@ -567,6 +576,12 @@ export default function Dropbox() {
             <FaDropbox
               onClick={handleDropboxUpload}
               title="Upload from Dropbox"
+              className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
+            />
+
+            <FaGoogleDrive
+              onClick={handleGoogleDriveUpload}
+              title="Upload from Google Drive"
               className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
             />
           </div>
