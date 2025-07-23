@@ -48,6 +48,7 @@ async function checkDependencies() {
     { name: 'libvips', command: 'vips --version' },
     { name: 'ffmpeg', command: 'ffmpeg -version' },
     { name: 'calibre', command: 'ebook-convert --version' },
+    { name: 'ghostscript', command: 'gs --version' },
   ];
   const results = {};
 
@@ -116,8 +117,11 @@ async function checkDependencies() {
   if (!dependencies['calibre']) {
     console.warn('Warning: calibre is not installed. Ebook conversions will fail.');
   }
+  if (!dependencies['ghostscript']) {
+    console.error('Critical: ghostscript is not installed. PDF compression will fail.');
+  }
   if (!dependencies['pdf-lib']) {
-    console.error('Critical: pdf-lib module is not installed. PDF compression will fail.');
+    console.warn('Warning: pdf-lib module is not installed. Some PDF operations may be limited.');
   }
 })();
 
@@ -273,21 +277,24 @@ async function compressPDF(inputPath, outputPath, quality = 80) {
     if (!isValidPDF) {
       throw new Error(`Invalid or corrupted PDF file: ${inputPath}`);
     }
-    const pdfBytes = await fsPromises.readFile(inputPath);
-    const pdfDoc = await PDFDocument.load(pdfBytes);
-    
-    // Adjust compression based on quality
-    const images = pdfDoc.getImages();
-    for (const image of images) {
-      if (image.getCompression() === 'JPEG') {
-        // Apply JPEG compression with quality
-        image.setCompression('JPEG', quality / 100);
-      }
+
+    // Map quality to Ghostscript compression settings
+    let pdfSetting;
+    if (quality >= 80) {
+      pdfSetting = 'prepress'; // High quality
+    } else if (quality >= 60) {
+      pdfSetting = 'printer'; // Medium quality
+    } else {
+      pdfSetting = 'screen'; // Low quality
     }
+
+    // Use Ghostscript for PDF compression
+    const gsCommand = `gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/${pdfSetting} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outputPath}" "${inputPath}"`;
+    await execPromise(gsCommand);
     
-    const compressedPdfBytes = await pdfDoc.save();
-    await fsPromises.writeFile(outputPath, compressedPdfBytes);
-    console.log(`PDF compression completed: ${outputPath}`);
+    // Verify output file exists
+    await fsPromises.access(outputPath);
+    console.log(`PDF compression completed with Ghostscript: ${outputPath}`);
   } catch (err) {
     console.error(`PDF compression failed: ${err.message}`);
     throw new Error(`Failed to compress PDF: ${err.message}`);
