@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FaFolderOpen, FaDropbox } from "react-icons/fa";
-// import { FaGoogleDrive } from "react-icons/fa";
 import { FiArrowRight, FiDownload } from "react-icons/fi";
 
 declare global {
@@ -33,8 +32,6 @@ interface FormatOptions {
   pdfs: {
     document: string[];
     compressor: string[];
-    // ebook: string[];
-    // pdf_ebook: string[];
     pdf_to_image: string[];
   };
   audio: {
@@ -42,10 +39,6 @@ interface FormatOptions {
   };
   video: {
     video: string[];
-    // audio: string[];
-    // device: string[];
-    // compressor: string[];
-    // webservice: string[];
   };
   document: string[];
   archive: string[];
@@ -56,12 +49,11 @@ interface ConvertedFile {
   name: string;
   url: string;
   loading: boolean;
-  converting: boolean; // Added to track conversion state
+  converting: boolean;
   originalId: string;
 }
 
-const COMPRESSIBLE_FORMATS = ["jpg", "jpeg", "png", "gif", "svg"];
-
+const COMPRESSIBLE_FORMATS = ["jpg", "jpeg", "png", "gif", "svg", "pdf"];
 
 export default function Dropbox() {
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
@@ -76,10 +68,8 @@ export default function Dropbox() {
   const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load Google APIs and Dropbox SDK
   useEffect(() => {
     const loadGapiAndGis = () => {
-      // Load Google API client
       const gapiScript = document.createElement("script");
       gapiScript.src = "https://apis.google.com/js/api.js";
       gapiScript.async = true;
@@ -103,7 +93,6 @@ export default function Dropbox() {
       };
       document.body.appendChild(gapiScript);
 
-      // Load Google Identity Services
       const gisScript = document.createElement("script");
       gisScript.src = "https://accounts.google.com/gsi/client";
       gisScript.async = true;
@@ -115,7 +104,6 @@ export default function Dropbox() {
       };
       document.body.appendChild(gisScript);
 
-      // Load Dropbox SDK
       const dropboxScript = document.createElement("script");
       dropboxScript.src = "https://www.dropbox.com/static/api/2/dropins.js";
       dropboxScript.id = "dropboxjs";
@@ -130,7 +118,6 @@ export default function Dropbox() {
     loadGapiAndGis();
   }, [GOOGLE_API_KEY, DROPBOX_APP_KEY]);
 
-  // Map file extension to format section
   const getFormatSection = (ext: string): keyof FormatOptions => {
     ext = ext.toLowerCase();
     if (ext === "pdf") return "pdfs";
@@ -142,10 +129,9 @@ export default function Dropbox() {
     if (["mp4", "avi", "mov", "webm", "mkv", "flv", "wmv", "3gp", "mpg", "ogv"].includes(ext)) return "video";
     if (["zip", "7z"].includes(ext)) return "archive";
     if (["epub", "mobi", "azw3", "fb2", "lit", "lrf", "pdb", "tcr"].includes(ext)) return "ebook";
-    return "image"; // Default fallback
+    return "image";
   };
 
-  // Format options configuration
   const formatOptions: FormatOptions = {
     image: {
       image: ["GIF", "JPG", "PNG", "TIFF", "WEBP"],
@@ -154,20 +140,14 @@ export default function Dropbox() {
     },
     pdfs: {
       document: ["DOCX"],
-      compressor: ["Quality 90%", "Quality 70%", "Quality 50%"],
+      compressor: ["High Quality", "Medium Quality", "Low Quality"],
       pdf_to_image: ["JPG", "PNG", "GIF"],
-      // ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
-      // pdf_ebook: ["AZW3", "EPUB", "FB2", "LIT", "LRF", "MOBI", "PDB", "TCR"],
     },
     audio: {
-      audio: ["FLAC", "OGG", "OPUS", "WAV",],
+      audio: ["FLAC", "OGG", "OPUS", "WAV"],
     },
     video: {
-      video: ["AVI", "FLV",]
-      // audio: ["FLAC","OGG", "OPUS", "WAV", ],
-      // device: ["ANDROID", "BLACKBERRY", "IPAD", "IPHONE", "IPOD", "PLAYSTATION", "PSP", "WII", "XBOX"],
-      // compressor: ["MP4"],
-      // webservice: ["DAILYMOTION", "FACEBOOK", "INSTAGRAM", "TELEGRAM", "TWITCH", "TWITTER", "VIBER", "VIMEO", "WHATSAPP", "YOUTUBE"],
+      video: ["AVI", "FLV"],
     },
     document: ["DOCX", "PDF", "TXT", "RTF", "ODT"],
     archive: ["ZIP", "7Z"],
@@ -176,16 +156,6 @@ export default function Dropbox() {
 
   const [compressError, setCompressError] = useState<{ [id: string]: string }>({});
 
-  // Trigger Google Drive Picker
-  // const handleGoogleDriveUpload = () => {
-  //   if (!pickerLoaded.current) {
-  //     setErrorMessage("Google Picker is not ready. Please try again shortly.");
-  //     return;
-  //   }
-  //   triggerGoogleSignIn();
-  // };
-
-  // Initialize Google Sign-In
   const triggerGoogleSignIn = () => {
     if (!window.google?.accounts?.oauth2) {
       setErrorMessage("Google Identity Services not loaded. Please try again.");
@@ -209,7 +179,6 @@ export default function Dropbox() {
     tokenClient.requestAccessToken();
   };
 
-  // Create Google Picker
   const createGooglePicker = (token: string) => {
     if (pickerLoaded.current && window.google?.picker && typeof window.google.picker.PickerBuilder === "function") {
       try {
@@ -218,7 +187,7 @@ export default function Dropbox() {
           .addView(view)
           .setOAuthToken(token)
           .setDeveloperKey(GOOGLE_API_KEY)
-          .setOrigin(window.location.origin) // Use dynamic origin
+          .setOrigin(window.location.origin)
           .setCallback((data: any) => handlePickerResponse(data, token))
           .build();
         picker.setVisible(true);
@@ -231,7 +200,6 @@ export default function Dropbox() {
     }
   };
 
-  // Handle Google Picker response
   const handlePickerResponse = async (data: any, token: string) => {
     if (data.action === window.google.picker.Action.PICKED) {
       const docs = data.docs;
@@ -291,7 +259,6 @@ export default function Dropbox() {
     }
   };
 
-  // Handle local file upload
   const handleLocalFileClick = () => fileInputRef.current?.click();
 
   const handleLocalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -320,7 +287,6 @@ export default function Dropbox() {
     }
   };
 
-  // Handle Dropbox upload
   const handleDropboxUpload = () => {
     if (!window.Dropbox) {
       setErrorMessage("Dropbox SDK not loaded. Please ensure the Dropbox script is included.");
@@ -358,8 +324,8 @@ export default function Dropbox() {
                 source: "dropbox",
                 url: f.link,
                 id: `${f.name}_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
-                selectedSubSection: undefined, // Match FileItem interface
-              } as FileItem; // Explicitly cast to FileItem
+                selectedSubSection: undefined,
+              } as FileItem;
             } catch (err) {
               console.error(`Error fetching Dropbox file ${f.name}:`, err);
               return null;
@@ -378,7 +344,6 @@ export default function Dropbox() {
     });
   };
 
-  // Toggle format selection menu
   const toggleMenu = (index: number) => {
     setCompressError({});
     setSelectedFiles((prev) =>
@@ -388,13 +353,11 @@ export default function Dropbox() {
     );
   };
 
-  // Remove a selected file
   const removeFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
     setErrorMessage(null);
   };
 
-  // Select a subsection for format options
   const selectSubSection = (index: number, subSection: string) => {
     setCompressError({});
     const updated = [...selectedFiles];
@@ -402,16 +365,10 @@ export default function Dropbox() {
     updated[index].selectedFormat = "";
     if (subSection === "compressor") {
       const ext = updated[index].file.name.split(".").pop()?.toLowerCase() || "";
-      if (updated[index].section === "image" && !COMPRESSIBLE_FORMATS.includes(ext)) {
+      if (!COMPRESSIBLE_FORMATS.includes(ext)) {
         setCompressError((err) => ({
           ...err,
-          [updated[index].id]:
-            "Compression is only supported for JPG, PNG, GIF, or SVG files.",
-        }));
-      } else if (updated[index].section === "pdfs" && ext !== "pdf") {
-        setCompressError((err) => ({
-          ...err,
-          [updated[index].id]: "PDF compression is only supported for PDF files.",
+          [updated[index].id]: "Compression is only supported for JPG, PNG, GIF, SVG, or PDF files.",
         }));
       }
       updated[index].selectedQuality = undefined;
@@ -419,38 +376,33 @@ export default function Dropbox() {
     setSelectedFiles(updated);
   };
 
-  // Select a format for conversion
   const selectFormat = (index: number, format: string, subSection: string) => {
     setCompressError({});
     const ext = selectedFiles[index].file.name.split(".").pop()?.toLowerCase() ?? "";
-    if (subSection === "compressor") {
-      if (selectedFiles[index].section === "image" && !COMPRESSIBLE_FORMATS.includes(ext)) {
-        setCompressError((err) => ({
-          ...err,
-          [selectedFiles[index].id]:
-            "Compression is only supported for JPG, PNG, GIF, or SVG files.",
-        }));
-        return;
-      } else if (selectedFiles[index].section === "pdfs" && ext !== "pdf") {
-        setCompressError((err) => ({
-          ...err,
-          [selectedFiles[index].id]: "PDF compression is only supported for PDF files.",
-        }));
-        return;
-      }
+    if (subSection === "compressor" && !COMPRESSIBLE_FORMATS.includes(ext)) {
+      setCompressError((err) => ({
+        ...err,
+        [selectedFiles[index].id]: "Compression is only supported for JPG, PNG, GIF, SVG, or PDF files.",
+      }));
+      return;
     }
     const updated = [...selectedFiles];
     updated[index].selectedFormat = `${subSection}:${format}`;
     updated[index].showMenu = false;
     if (subSection === "compressor") {
-      const match = format.match(/\d+/g);
-      const val = match && match.length ? parseInt(match[0], 10) : undefined;
-      updated[index].selectedQuality = val;
+      const qualityMap: { [key: string]: number } = {
+        "Quality 90%": 90,
+        "Quality 70%": 70,
+        "Quality 50%": 50,
+        "High Quality": 80,
+        "Medium Quality": 60,
+        "Low Quality": 40,
+      };
+      updated[index].selectedQuality = qualityMap[format] || 80;
     }
     setSelectedFiles(updated);
   };
 
-  // Handle file conversion
   const handleConvert = async () => {
     if (isConverting) return;
     if (selectedFiles.length === 0) {
@@ -469,25 +421,17 @@ export default function Dropbox() {
     const formats = selectedFiles.map((item) => {
       const [subSection, target] = item.selectedFormat.split(":");
       let type = item.section;
-      if (subSection === "compressor") {
-        type = item.section === "pdfs" ? "pdf_compressor" : "compressor";
-      }
+      if (subSection === "compressor") type = "compressor";
       const ext = item.file.name.split(".").pop()?.toLowerCase() ?? "";
-      if (subSection === "compressor" && item.section === "image" && !COMPRESSIBLE_FORMATS.includes(ext)) {
-        setErrorMessage(
-          "Image compression is only supported for JPG, PNG, GIF, or SVG files."
-        );
+      if (subSection === "compressor" && !COMPRESSIBLE_FORMATS.includes(ext)) {
+        setErrorMessage("Compression is only supported for JPG, PNG, GIF, SVG, or PDF files.");
         throw new Error("Compressor format not supported.");
-      }
-      if (subSection === "compressor" && item.section === "pdfs" && ext !== "pdf") {
-        setErrorMessage("PDF compression is only supported for PDF files.");
-        throw new Error("PDF compressor format not supported.");
       }
       let q: number | undefined;
       if (subSection === "compressor") {
         q = item.selectedQuality;
         if (!q) {
-          setErrorMessage("Choose a quality (90, 70, or 50) for compression.");
+          setErrorMessage("Choose a quality for compression.");
           throw new Error("No quality chosen for compression.");
         }
       }
@@ -576,7 +520,6 @@ export default function Dropbox() {
     }
   };
 
-  // Handle file download
   const handleDownload = async (url: string, name: string, index: number) => {
     setConvertedFiles((prev) =>
       prev.map((file, i) => (i === index ? { ...file, loading: true } : file))
@@ -593,7 +536,6 @@ export default function Dropbox() {
     }
   };
 
-  // Helper function to get format options for current subsection
   const getCurrentFormatOptions = (section: keyof FormatOptions, subSection?: string): string[] => {
     const sectionOptions = formatOptions[section];
     if (Array.isArray(sectionOptions)) {
@@ -627,11 +569,6 @@ export default function Dropbox() {
               title="Upload from Dropbox"
               className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
             />
-            {/* <FaGoogleDrive
-              onClick={handleGoogleDriveUpload}
-              title="Upload from Google Drive"
-              className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
-            /> */}
           </div>
           <div className="dropboxfoot mt-3 text-sm text-gray-400">
             100 MB maximum file size and up to 5 files.
@@ -683,7 +620,7 @@ export default function Dropbox() {
                             )
                           }
                           disabled={convertedFile.loading}
-                          className="flex items-center gap-2 bg-green-500 text-white px-4 py-1 rounded-md text-[14px] font-semibold hover:bg-yellow-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-1 rounded-md text-[14px] font-semibold hover:bg-yellow-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <FiDownload className="text-[16px]" />
                           {convertedFile.loading ? "Downloading..." : "Download"}
