@@ -4,6 +4,7 @@ import ContactPage from "./pages/ContactPage";
 import ConverterPage from "./pages/ConverterPage";
 import AboutPage from "./pages/AboutPage";
 import BlogPage from "./pages/BlogPage"
+import PrivacyPolicy from "./pages/privacy";
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
       <Route path="/contactpage" element={<ContactPage />} />
       <Route path="/aboutpage" element={<AboutPage />} />
       <Route path="/blogpage" element={<BlogPage />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
     </Routes>
   );
 }
