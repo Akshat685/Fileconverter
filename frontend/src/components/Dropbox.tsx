@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { FaFolderOpen, FaDropbox  , FaGoogleDrive} from "react-icons/fa";
+import { FaFolderOpen, FaDropbox, FaGoogleDrive } from "react-icons/fa";
 import { FiArrowRight, FiDownload } from "react-icons/fi";
 
 declare global {
@@ -67,13 +67,34 @@ export default function Dropbox() {
   const [isConverting, setIsConverting] = useState(false);
   const [convertedFiles, setConvertedFiles] = useState<ConvertedFile[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPickerReady, setIsPickerReady] = useState(false);
 
   useEffect(() => {
-    const loadGapiAndGis = () => {
-      const gapiScript = document.createElement("script");
-      gapiScript.src = "https://apis.google.com/js/api.js";
-      gapiScript.async = true;
-      gapiScript.onload = () => {
+    const loadGapiAndGis = async () => {
+      const loadScript = (src: string, id?: string, attr?: { [key: string]: string }) => {
+        return new Promise((resolve, reject) => {
+          if (document.querySelector(`script[src="${src}"]`)) {
+            resolve(true);
+            return;
+          }
+          const script = document.createElement("script");
+          script.src = src;
+          script.async = true;
+          if (id) script.id = id;
+          if (attr) Object.entries(attr).forEach(([key, value]) => script.setAttribute(key, value));
+          script.onload = () => resolve(true);
+          script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+          document.body.appendChild(script);
+        });
+      };
+
+      try {
+        await loadScript("https://apis.google.com/js/api.js");
+        await loadScript("https://accounts.google.com/gsi/client");
+        await loadScript("https://www.dropbox.com/static/api/2/dropins.js", "dropboxjs", {
+          "data-app-key": DROPBOX_APP_KEY,
+        });
+
         window.gapi.load("client:picker", async () => {
           try {
             await window.gapi.client.init({
@@ -81,38 +102,17 @@ export default function Dropbox() {
               discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
             });
             pickerLoaded.current = true;
+            setIsPickerReady(true);
             console.log("Google API client initialized");
           } catch (err) {
-            // console.error("Failed to init gapi client:", err);
+            console.error("Failed to init gapi client:", err);
             setErrorMessage("Failed to initialize Google API client.");
           }
-        }); 
-      };
-      gapiScript.onerror = () => {
-        setErrorMessage("Failed to load Google API script.");
-      };
-      document.body.appendChild(gapiScript);
-
-      const gisScript = document.createElement("script");
-      gisScript.src = "https://accounts.google.com/gsi/client";
-      gisScript.async = true;
-      gisScript.onload = () => {
-        console.log("Google Identity Services loaded");
-      };
-      gisScript.onerror = () => {
-        setErrorMessage("Failed to load Google Identity Services script.");
-      };
-      document.body.appendChild(gisScript);
-
-      const dropboxScript = document.createElement("script");
-      dropboxScript.src = "https://www.dropbox.com/static/api/2/dropins.js";
-      dropboxScript.id = "dropboxjs";
-      dropboxScript.setAttribute("data-app-key", DROPBOX_APP_KEY);
-      dropboxScript.async = true;
-      dropboxScript.onerror = () => {
-        setErrorMessage("Failed to load Dropbox SDK.");
-      };
-      document.body.appendChild(dropboxScript);
+        });
+      } catch (err) {
+        console.error("Script loading error:", err);
+        setErrorMessage("Failed to load required scripts. Please refresh and try again.");
+      }
     };
 
     loadGapiAndGis();
@@ -156,10 +156,9 @@ export default function Dropbox() {
 
   const [compressError, setCompressError] = useState<{ [id: string]: string }>({});
 
-  // Trigger Google Drive Picker
-   const handleGoogleDriveUpload = () => {
-    if (!pickerLoaded.current) {
-      setErrorMessage("Google Picker is not ready. Please try again shortly.");
+  const handleGoogleDriveUpload = () => {
+    if (!isPickerReady) {
+      setErrorMessage("Google Picker is not ready. Please wait a moment and try again.");
       return;
     }
     triggerGoogleSignIn();
@@ -578,7 +577,6 @@ export default function Dropbox() {
               title="Upload from Dropbox"
               className="text-white text-[26px] cursor-pointer hover:scale-110 transition"
             />
-
             <FaGoogleDrive
               onClick={handleGoogleDriveUpload}
               title="Upload from Google Drive"
