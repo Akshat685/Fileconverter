@@ -1,22 +1,5 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "dropbox.tsx",
-      "use": "@vercel/node",
-      "config": { "includeFiles": ["[]"] }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/dropbox.tsx"
-    }
-  ],
-  "env": {
-    "VITE_GOOGLE_CLIENT_ID": "@google_client_id",
-    "VITE_GOOGLE_API_KEY": "@google_api_key",
-    "VITE_DROPBOX_APP_KEY": "@dropbox_app_key",
-    "VITE_API_URL": "https://fileconverter-backend.onrender.com"
-  }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
 }
