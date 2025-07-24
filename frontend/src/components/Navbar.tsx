@@ -75,9 +75,8 @@ const Navbar = () => {
         </div>
 
         <div
-          className={`${
-            mobileMenuOpen ? "flex" : "hidden"
-          } sm:flex flex-col sm:flex-row sm:items-left ml-10 gap-5 space-x-4 sm:space-x-5 lg:space-x-6 space-y-4 sm:space-y-0 absolute sm:static top-14 left-0 w-full sm:w-auto bg-white sm:bg-transparent px-4 sm:px-0 py-4 sm:py-0 border-b sm:border-none sm:shadow-none shadow-md`}
+          className={`${mobileMenuOpen ? "flex" : "hidden"
+            } sm:flex flex-col sm:flex-row sm:items-left ml-10 gap-5 space-x-4 sm:space-x-5 lg:space-x-6 space-y-4 sm:space-y-0 absolute sm:static top-14 left-0 w-full sm:w-auto bg-white sm:bg-transparent px-4 sm:px-0 py-4 sm:py-0 border-b sm:border-none sm:shadow-none shadow-md`}
         >
           <a href="/" className="text-sm sm:text-[15px] hover:text-red-600">Home</a>
           <button
@@ -114,7 +113,7 @@ const Navbar = () => {
             </button>
           )}
           {filtered.length > 0 && (
-            <div className="absolute top-full mt-1 w-full bg-white border border-[#ced4da] rounded-md shadow-md z-50">
+            <div className="absolute top-full w-full bg-white border border-[#ced4da] rounded-md shadow-md z-50 max-h-60 overflow-y-auto">
               {filtered.map((item, idx) => (
                 <div
                   key={idx}
@@ -130,6 +129,7 @@ const Navbar = () => {
               ))}
             </div>
           )}
+
         </div>
       </nav>
 
