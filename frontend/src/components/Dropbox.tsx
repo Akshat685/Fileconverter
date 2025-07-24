@@ -134,7 +134,7 @@ export default function Dropbox() {
 
   const formatOptions: FormatOptions = {
     image: {
-      image: ["GIF", "JPG", "PNG", "TIFF", "WEBP", "BMP"],
+      image: ["GIF", "JPG", "PNG", "TIFF", "WEBP"],
       compressor: ["High Quality", "Medium Quality", "Low Quality"],
       pdf: ["PDF"],
     },
@@ -399,6 +399,9 @@ export default function Dropbox() {
     updated[index].showMenu = false;
     if (subSection === "compressor") {
       const qualityMap: { [key: string]: number } = {
+        "Quality 90%": 90,
+        "Quality 70%": 70,
+        "Quality 50%": 50,
         "High Quality": 80,
         "Medium Quality": 60,
         "Low Quality": 40,
@@ -472,7 +475,7 @@ export default function Dropbox() {
         controller.abort(new Error("Conversion request timed out after 300 seconds"));
       }, 300000);
 
-      const res = await fetch(`${API_URL}/api/convert`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/convert`, {
         method: "POST",
         body: formData,
         signal: controller.signal,
@@ -486,7 +489,9 @@ export default function Dropbox() {
       const converted = await Promise.all(
         data.files.map(async (file: { name: string; path: string }, index: number) => {
           try {
-            const fileRes = await fetch(`${API_URL}${file.path}`);
+            const fileRes = await fetch(
+              `${import.meta.env.VITE_API_URL}${file.path}`
+            );
             if (!fileRes.ok)
               throw new Error(
                 `Failed to fetch converted file: ${file.name}, status: ${fileRes.status}`
