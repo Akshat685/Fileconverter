@@ -278,21 +278,18 @@ async function compressPDF(inputPath, outputPath, quality = 80) {
       throw new Error(`Invalid or corrupted PDF file: ${inputPath}`);
     }
 
-    // Map quality to Ghostscript compression settings
     let pdfSetting;
     if (quality >= 80) {
-      pdfSetting = 'prepress'; // High quality
+      pdfSetting = 'prepress';
     } else if (quality >= 60) {
-      pdfSetting = 'printer'; // Medium quality
+      pdfSetting = 'printer';
     } else {
-      pdfSetting = 'screen'; // Low quality
+      pdfSetting = 'screen';
     }
 
-    // Use Ghostscript for PDF compression
     const gsCommand = `gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/${pdfSetting} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outputPath}" "${inputPath}"`;
     await execPromise(gsCommand);
     
-    // Verify output file exists
     await fsPromises.access(outputPath);
     console.log(`PDF compression completed with Ghostscript: ${outputPath}`);
   } catch (err) {
@@ -578,10 +575,16 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       }
 
       const inputPath = path.resolve(file.path);
-      const outputPath = path.resolve(
-        convertedDir,
-        `${path.basename(file.filename, path.extname(file.filename))}_${Date.now()}.${outputExt}`
-      );
+      const originalBaseName = path.basename(file.originalname, path.extname(file.originalname));
+      const outputFilename = `${originalBaseName}.${outputExt}`;
+      let outputPath = path.resolve(convertedDir, outputFilename);
+
+      // Handle filename conflicts
+      let counter = 1;
+      while (await fsPromises.access(outputPath).then(() => true).catch(() => false)) {
+        outputPath = path.resolve(convertedDir, `${originalBaseName}_${counter}.${outputExt}`);
+        counter++;
+      }
 
       try {
         await fsPromises.access(inputPath);
@@ -613,11 +616,10 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
           case 'image':
             await convertImage(inputPath, outputPath, outputExt);
             break;
-          case "compressor":
-            const compressorQuality =
-              typeof formatInfo.quality === "number" ? formatInfo.quality : 80;
+          case 'compressor':
+            const compressorQuality = typeof formatInfo.quality === 'number' ? formatInfo.quality : 80;
             if (!SUPPORTED_COMPRESS_FORMATS.includes(outputExt)) {
-              throw new Error("Image compression is only supported for JPG, PNG, GIF, SVG, or PDF files.");
+              throw new Error('Image compression is only supported for JPG, PNG, GIF, SVG, or PDF files.');
             }
             await convertCompressor(inputPath, outputPath, outputExt, compressorQuality);
             break;
@@ -647,6 +649,7 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       outputFiles.push({
         path: outputPath,
         name: path.basename(outputPath),
+        originalName: file.originalname,
       });
       tempFiles.push(outputPath);
     }
@@ -655,6 +658,7 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       files: outputFiles.map(file => ({
         name: file.name,
         path: `/converted/${file.name}`,
+        originalName: file.originalName,
       })),
     });
   } catch (error) {
