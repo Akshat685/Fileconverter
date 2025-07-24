@@ -600,7 +600,7 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       } else if (conversionType === 'image' && outputExt === 'pdf') {
         const isValidImage = await validateImage(inputPath);
         if (!isValidImage) {
-          throw new Error(`The image file must be one of the following formats: 'jpg', 'jpeg', 'png' ${file.originalname}`);
+          throw new Error(`The image file must be one of the following formats: 'jpg', 'png' to convert pdf`);
         }
       }
 
