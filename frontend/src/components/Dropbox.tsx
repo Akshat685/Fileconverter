@@ -135,7 +135,7 @@ export default function Dropbox() {
   const formatOptions: FormatOptions = {
     image: {
       image: ["GIF", "JPG", "PNG", "TIFF", "WEBP"],
-      compressor: ["Quality 90%", "Quality 70%", "Quality 50%"],
+      compressor: ["High Quality", "Medium Quality", "Low Quality"],
       pdf: ["PDF"],
     },
     pdfs: {
