@@ -40,6 +40,9 @@ const conversionTimeout = parseInt(process.env.CONVERSION_TIMEOUT) || 120000;
 
 const SUPPORTED_COMPRESS_FORMATS = ["jpg", "jpeg", "png", "gif", "svg", "pdf"];
 
+// Updated to include additional formats for PDF conversion
+const supportedImageToPdfFormats = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+
 async function checkDependencies() {
   const checks = [
     { name: 'GraphicsMagick', command: 'gm version' },
@@ -210,25 +213,6 @@ const supportedFormats = {
   ebook: ['epub', 'mobi', 'azw3'],
 };
 
-const supportedImageToPdfFormats = ['jpg', 'jpeg', 'png'];
-
-const upload = multer({
-  dest: 'uploads/',
-  limits: { fileSize: 100 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowedExtensions = allFormats.map(ext => `.${ext.toLowerCase()}`);
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedExtensions.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Unsupported file type: ${ext}. Supported types: ${allFormats.join(', ')}`), false);
-    }
-  },
-});
-
-const uploadsDir = path.join(__dirname, 'uploads');
-const convertedDir = path.join(__dirname, 'converted');
-
 async function ensureDirectories() {
   try {
     await fsPromises.mkdir(uploadsDir, { recursive: true });
@@ -308,10 +292,23 @@ async function convertImageToPDF(inputPath, outputPath) {
     if (typeof imgToPDF !== 'function') {
       throw new Error('imgToPDF is not a function. Check image-to-pdf module installation.');
     }
-    const imgStream = fs.createReadStream(inputPath);
+    const inputExt = path.extname(inputPath).toLowerCase().slice(1);
+    let tempPath = inputPath;
+    
+    // Preprocess unsupported formats to PNG if necessary
+    if (!['jpg', 'jpeg', 'png'].includes(inputExt)) {
+      console.log(`Preprocessing ${inputExt} to PNG for PDF conversion: ${inputPath}`);
+      tempPath = path.join(convertedDir, `temp_${path.basename(inputPath, path.extname(inputPath))}.png`);
+      await sharp(inputPath)
+        .png()
+        .toFile(tempPath);
+      console.log(`Preprocessed to PNG: ${tempPath}`);
+    }
+
+    const imgStream = fs.createReadStream(tempPath);
     const pdfStream = fs.createWriteStream(outputPath);
     await new Promise((resolve, reject) => {
-      imgToPDF([inputPath], 'A4').pipe(pdfStream);
+      imgToPDF([tempPath], 'A4').pipe(pdfStream);
       pdfStream.on('finish', () => {
         console.log(`Converted image to PDF: ${outputPath}`);
         resolve();
@@ -325,6 +322,11 @@ async function convertImageToPDF(inputPath, outputPath) {
         reject(new Error(`Failed to read image: ${err.message}`));
       });
     });
+
+    // Clean up temporary PNG file if created
+    if (tempPath !== inputPath) {
+      await fsPromises.unlink(tempPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
+    }
   } catch (err) {
     console.error(`Image to PDF conversion failed: ${err.message}`);
     throw new Error(`Failed to convert image to PDF: ${err.message}`);
@@ -523,6 +525,9 @@ async function convertCompressor(inputPath, outputPath, format, quality = 80) {
   }
 }
 
+const uploadsDir = path.join(__dirname, 'Uploads');
+const convertedDir = path.join(__dirname, 'converted');
+
 app.post('/api/convert', upload.array('files', 5), async (req, res) => {
   console.log('Received /api/convert request', {
     files: req.files ? req.files.map(f => f.originalname) : [],
@@ -600,7 +605,7 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       } else if (conversionType === 'image' && outputExt === 'pdf') {
         const isValidImage = await validateImage(inputPath);
         if (!isValidImage) {
-          throw new Error(`The image file must be one of the following formats: 'jpg', 'png' to convert pdf`);
+          throw new Error(`Invalid or unsupported image file: ${file.originalname}`);
         }
       }
 
