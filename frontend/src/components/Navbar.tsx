@@ -81,7 +81,11 @@ const Navbar = () => {
           <a href="/" className="text-sm sm:text-[15px] hover:text-red-600">Home</a>
           <button
             ref={toggleButtonRef}
-            onClick={() => setDropdownOpen(prev => !prev)}
+            onClick={() => {
+              setDropdownOpen(prev => !prev);
+              setSearchTerm("");     // clear search
+              setFiltered([]);       // hide search suggestions
+            }}
             className="flex items-center text-sm sm:text-[15px] hover:text-red-600 focus:outline-none"
           >
             Converter <ChevronDown size={14} className="ml-1" />
@@ -96,6 +100,9 @@ const Navbar = () => {
             ref={searchRef}
             type="text"
             value={searchTerm}
+            onFocus={() => {
+              setDropdownOpen(false); // close converter dropdown
+            }}
             onChange={e => setSearchTerm(e.target.value)}
             placeholder="Search converter..."
             className="border border-[#ced4da] p-2 pl-4 pr-8 py-1 text-sm w-48 lg:w-64 focus:outline-none rounded-lg"
