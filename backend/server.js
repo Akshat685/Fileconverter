@@ -6,7 +6,6 @@ const fsPromises = fs.promises;
 const path = require('path');
 const cors = require('cors');
 const tmp = require('tmp');
-const { FileConverter } = require('multi-format-converter');
 const imgToPDFModule = require('image-to-pdf');
 const { exec } = require('child_process');
 const util = require('util');
@@ -17,6 +16,9 @@ const { fromPath } = require('pdf2pic');
 const sevenZip = require('node-7z');
 const compressImages = require("compress-images");
 const { PDFDocument } = require('pdf-lib');
+const { Converter } = require('pdf2docx'); // Added for PDF-to-DOCX
+const Tesseract = require('tesseract.js'); // Added for OCR
+const { Document, Packer, Paragraph } = require('docx'); // Added for fallback DOCX creation
 
 const execPromise = util.promisify(exec);
 
@@ -70,8 +72,10 @@ async function checkDependencies() {
     { name: 'sharp', module: 'sharp' },
     { name: 'pdf2pic', module: 'pdf2pic' },
     { name: 'node-7z', module: 'node-7z' },
-    { name: 'multi-format-converter', module: 'multi-format-converter' },
     { name: 'pdf-lib', module: 'pdf-lib' },
+    { name: 'pdf2docx', module: 'pdf2docx' }, // Added
+    { name: 'tesseract.js', module: 'tesseract.js' }, // Added
+    { name: 'docx', module: 'docx' }, // Added
   ];
 
   for (const { name, module } of modules) {
@@ -122,6 +126,15 @@ async function checkDependencies() {
   }
   if (!dependencies['pdf-lib']) {
     console.warn('Warning: pdf-lib module is not installed. Some PDF operations may be limited.');
+  }
+  if (!dependencies['pdf2docx']) {
+    console.error('Critical: pdf2docx module is not installed. PDF to DOCX conversions will fail.');
+  }
+  if (!dependencies['tesseract.js']) {
+    console.warn('Warning: tesseract.js module is not installed. Image-based PDF to DOCX conversions may be limited.');
+  }
+  if (!dependencies['docx']) {
+    console.warn('Warning: docx module is not installed. Fallback DOCX creation may fail.');
   }
 })();
 
@@ -179,15 +192,6 @@ app.get('/api/test', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
-
-let converter;
-try {
-  converter = new FileConverter({ pdfParse });
-  console.log('FileConverter initialized successfully');
-} catch (err) {
-  console.error('Failed to initialize FileConverter:', err.message, err.stack);
-  process.exit(1);
-}
 
 const allFormats = [
   'bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg',
@@ -262,19 +266,19 @@ async function validateImage(inputPath) {
 async function validatePDF(inputPath) {
   try {
     const dataBuffer = await fsPromises.readFile(inputPath);
-    await pdfParse(dataBuffer);
+    const data = await pdfParse(dataBuffer);
     console.log(`PDF validation successful for ${inputPath}`);
-    return true;
+    return { isValid: true, text: data.text };
   } catch (err) {
     console.error(`PDF validation failed for ${inputPath}: ${err.message}`);
-    return false;
+    return { isValid: false, text: '' };
   }
 }
 
 async function compressPDF(inputPath, outputPath, quality = 80) {
   try {
-    const isValidPDF = await validatePDF(inputPath);
-    if (!isValidPDF) {
+    const { isValid } = await validatePDF(inputPath);
+    if (!isValid) {
       throw new Error(`Invalid or corrupted PDF file: ${inputPath}`);
     }
 
@@ -303,10 +307,6 @@ async function convertImageToPDF(inputPath, outputPath) {
     const isValidImage = await validateImage(inputPath);
     if (!isValidImage) {
       throw new Error(`Invalid image file: ${inputPath}`);
-    }
-    console.log('imgToPDF type:', typeof imgToPDF, 'isFunction:', typeof imgToPDF === 'function');
-    if (typeof imgToPDF !== 'function') {
-      throw new Error('imgToPDF is not a function. Check image-to-pdf module installation.');
     }
     const imgStream = fs.createReadStream(inputPath);
     const pdfStream = fs.createWriteStream(outputPath);
@@ -368,8 +368,8 @@ async function convertPdf(inputPath, outputPath, format, originalName) {
   }
   if (['jpg', 'png', 'gif'].includes(format)) {
     try {
-      const isValidPDF = await validatePDF(inputPath);
-      if (!isValidPDF) {
+      const { isValid } = await validatePDF(inputPath);
+      if (!isValid) {
         throw new Error(`Invalid or corrupted PDF file: ${inputPath}`);
       }
       const outputBaseName = path.basename(inputPath, '.pdf');
@@ -399,10 +399,39 @@ async function convertPdf(inputPath, outputPath, format, originalName) {
     }
   } else if (format === 'docx') {
     try {
-      await converter.pdfToWord({ input: inputPath, output: outputPath });
-      console.log(`PDF to DOCX conversion completed using multi-format-converter: ${outputPath}`);
+      // First attempt with pdf2docx
+      const converter = new Converter(inputPath, outputPath);
+      await converter.convert();
+      // Verify output file
+      const stats = await fsPromises.stat(outputPath);
+      if (stats.size < 1000) { // Arbitrary threshold for "empty" DOCX
+        console.warn(`DOCX file ${outputPath} appears empty (size: ${stats.size} bytes). Attempting OCR fallback.`);
+        // Convert PDF to image for OCR
+        const tempPngPath = path.join(convertedDir, `temp_${Date.now()}.png`);
+        await fromPath(inputPath, {
+          density: 100,
+          format: 'png',
+          width: 595,
+          height: 842,
+        }).bulk(-1, { outputDir: convertedDir, outputName: path.basename(tempPngPath, '.png') });
+        const { data: { text } } = await Tesseract.recognize(tempPngPath, 'eng');
+        await fsPromises.unlink(tempPngPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
+        if (!text.trim()) {
+          throw new Error('OCR extracted no text from PDF');
+        }
+        // Create DOCX with extracted text
+        const doc = new Document({
+          sections: [{ children: [new Paragraph(text)] }],
+        });
+        const buffer = await Packer.toBuffer(doc);
+        await fsPromises.writeFile(outputPath, buffer);
+        console.log(`PDF to DOCX conversion completed with OCR fallback: ${outputPath}`);
+      } else {
+        console.log(`PDF to DOCX conversion completed using pdf2docx: ${outputPath}`);
+      }
     } catch (err) {
-      throw new Error(`PDF to DOCX conversion failed: ${err.message}`);
+      console.error(`PDF to DOCX conversion failed: ${err.message}`);
+      throw new Error(`Failed to convert PDF to DOCX: ${err.message}`);
     }
   } else {
     throw new Error(`Unsupported PDF output format: ${format}`);
@@ -428,10 +457,39 @@ async function convertDocument(inputPath, outputPath, format) {
   }
   if (format === 'docx') {
     try {
-      await converter.pdfToWord({ input: inputPath, output: outputPath });
-      console.log(`Document conversion to DOCX completed: ${outputPath}`);
+      // First attempt with pdf2docx
+      const converter = new Converter(inputPath, outputPath);
+      await converter.convert();
+      // Verify output file
+      const stats = await fsPromises.stat(outputPath);
+      if (stats.size < 1000) { // Arbitrary threshold for "empty" DOCX
+        console.warn(`DOCX file ${outputPath} appears empty (size: ${stats.size} bytes). Attempting OCR fallback.`);
+        // Convert PDF to image for OCR
+        const tempPngPath = path.join(convertedDir, `temp_${Date.now()}.png`);
+        await fromPath(inputPath, {
+          density: 100,
+          format: 'png',
+          width: 595,
+          height: 842,
+        }).bulk(-1, { outputDir: convertedDir, outputName: path.basename(tempPngPath, '.png') });
+        const { data: { text } } = await Tesseract.recognize(tempPngPath, 'eng');
+        await fsPromises.unlink(tempPngPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
+        if (!text.trim()) {
+          throw new Error('OCR extracted no text from PDF');
+        }
+        // Create DOCX with extracted text
+        const doc = new Document({
+          sections: [{ children: [new Paragraph(text)] }],
+        });
+        const buffer = await Packer.toBuffer(doc);
+        await fsPromises.writeFile(outputPath, buffer);
+        console.log(`Document conversion to DOCX completed with OCR fallback: ${outputPath}`);
+      } else {
+        console.log(`Document conversion to DOCX completed using pdf2docx: ${outputPath}`);
+      }
     } catch (err) {
-      throw new Error(`Document conversion failed: ${err.message}`);
+      console.error(`Document conversion failed: ${err.message}`);
+      throw new Error(`Failed to convert PDF to DOCX: ${err.message}`);
     }
   } else {
     await fsPromises.copyFile(inputPath, outputPath);
@@ -593,8 +651,8 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
       }
 
       if (conversionType === 'pdfs' && inputExt === 'pdf') {
-        const isValidPDF = await validatePDF(inputPath);
-        if (!isValidPDF) {
+        const { isValid } = await validatePDF(inputPath);
+        if (!isValid) {
           throw new Error(`Invalid or corrupted PDF file: ${file.originalname}`);
         }
       } else if (conversionType === 'image' && outputExt === 'pdf') {
@@ -644,6 +702,12 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
         }
       } finally {
         clearTimeout(timeoutId);
+      }
+
+      // Verify output file size
+      const stats = await fsPromises.stat(outputPath);
+      if (stats.size < 1000) {
+        console.warn(`Output file ${outputPath} is suspiciously small (${stats.size} bytes)`);
       }
 
       outputFiles.push({
