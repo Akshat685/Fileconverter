@@ -128,7 +128,6 @@ export default function Dropbox() {
       return "audio";
     if (["mp4", "avi", "mov", "webm", "mkv", "flv", "wmv", "3gp", "mpg", "ogv"].includes(ext)) return "video";
     if (["zip", "7z"].includes(ext)) return "archive";
-    if (["epub", "mobi", "azw3", "fb2", "lit", "lrf", "pdb", "tcr"].includes(ext)) return "ebook";
     return "image";
   };
 
@@ -139,7 +138,7 @@ export default function Dropbox() {
       pdf: ["PDF"],
     },
     pdfs: {
-      document: ["DOCX"],
+      document: ["DOCX", "TXT", "RTF", "ODT"],
       compressor: ["High Quality", "Medium Quality", "Low Quality"],
       pdf_to_image: ["JPG", "PNG", "GIF"],
     },
@@ -151,7 +150,7 @@ export default function Dropbox() {
     },
     document: ["DOCX", "PDF", "TXT", "RTF", "ODT"],
     archive: ["ZIP", "7Z"],
-    ebook: ["EPUB", "MOBI", "PDF", "AZW3"],
+    ebook: []
   };
 
   const [compressError, setCompressError] = useState<{ [id: string]: string }>({});
@@ -428,7 +427,7 @@ export default function Dropbox() {
     const formData = new FormData();
     const formats = selectedFiles.map((item) => {
       const [subSection, target] = item.selectedFormat.split(":");
-      let type = item.section;
+      let type: string = item.section;
       if (subSection === "compressor") type = "compressor";
       const ext = item.file.name.split(".").pop()?.toLowerCase() ?? "";
       if (subSection === "compressor" && !COMPRESSIBLE_FORMATS.includes(ext)) {
@@ -683,6 +682,11 @@ export default function Dropbox() {
                           ))}
                         </div>
                       </div>
+                    </div>
+                  )}
+                  {compressError[item.id] && (
+                    <div className="mt-2 text-red-500 text-xs font-medium px-1">
+                      {compressError[item.id]}
                     </div>
                   )}
                 </div>

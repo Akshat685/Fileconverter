@@ -11,13 +11,15 @@ const { exec } = require('child_process');
 const util = require('util');
 const { fileTypeFromBuffer } = require('file-type');
 const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+ffmpeg.setFfmpegPath(ffmpegPath);
 const sharp = require('sharp');
 const { fromPath } = require('pdf2pic');
 const sevenZip = require('node-7z');
-const compressImages = require("compress-images");
+const sevenBin = require('7zip-bin');
+const archiver = require('archiver');
 const { PDFDocument } = require('pdf-lib');
-const Tesseract = require('tesseract.js'); // Added for OCR
-const { Document, Packer, Paragraph } = require('docx'); // Added for fallback DOCX creation
+const { Document, Packer, Paragraph, TextRun } = require('docx');
 
 const execPromise = util.promisify(exec);
 
@@ -43,12 +45,8 @@ const SUPPORTED_COMPRESS_FORMATS = ["jpg", "jpeg", "png", "gif", "svg", "pdf"];
 
 async function checkDependencies() {
   const checks = [
-    { name: 'GraphicsMagick', command: 'gm version' },
-    { name: 'ImageMagick', command: 'convert -version' },
     { name: 'poppler-utils', command: 'pdftoppm -v' },
     { name: 'libvips', command: 'vips --version' },
-    { name: 'ffmpeg', command: 'ffmpeg -version' },
-    { name: 'calibre', command: 'ebook-convert --version' },
     { name: 'ghostscript', command: 'gs --version' },
   ];
   const results = {};
@@ -101,9 +99,6 @@ async function checkDependencies() {
   if (!dependencies['poppler-utils']) {
     console.error('Critical: poppler-utils is not installed. PDF to image conversions will fail.');
   }
-  if (!dependencies['ImageMagick']) {
-    console.error('Critical: ImageMagick is not installed. GIF conversions will fail.');
-  }
   if (!dependencies['file-type']) {
     console.error('Critical: file-type module is not installed. Image validation will fail.');
   }
@@ -112,12 +107,6 @@ async function checkDependencies() {
   }
   if (!dependencies['libvips']) {
     console.error('Critical: libvips is not installed. Image to PDF conversions may fail.');
-  }
-  if (!dependencies['ffmpeg']) {
-    console.error('Critical: ffmpeg is not installed. Audio/Video conversions will fail.');
-  }
-  if (!dependencies['calibre']) {
-    console.warn('Warning: calibre is not installed. Ebook conversions will fail.');
   }
   if (!dependencies['ghostscript']) {
     console.error('Critical: ghostscript is not installed. PDF compression will fail.');
@@ -190,23 +179,20 @@ app.get('/api/test', (req, res) => {
 
 const allFormats = [
   'bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg',
-  'pdf', 'docx', 'txt', 'rtf', 'odt',
-  'mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma',
-  'mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv',
-  'zip', '7z',
-  'epub', 'mobi', 'azw3',
-  'aac', 'aiff', 'm4v', 'mmf', 'wma', '3g2',
+  'pdf', 'docx', 'txt', 'rtf', 'odt', 'doc', 'html', 'ppt', 'pptx', 'xlsx',
+  'mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'm4v', 'mmf', '3g2',
+  'mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv', '3gp', 'mpg', 'ogv',
+  'zip', '7z'
 ];
 
 const supportedFormats = {
   image: ['bmp', 'eps', 'ico', 'svg', 'tga', 'wbmp', 'jpg', 'png', 'gif', 'tiff', 'webp', 'pdf'],
   compressor: ['jpg', 'png', 'svg', 'pdf'],
-  pdfs: ['jpg', 'png', 'gif', 'docx'],
+  pdfs: ['jpg', 'png', 'gif', 'docx', 'txt', 'rtf', 'odt'],
   audio: ['mp3', 'wav', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'm4v', 'mmf', '3g2'],
-  video: ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv'],
-  document: ['docx', 'pdf'],
-  archive: ['zip', '7z'],
-  ebook: ['epub', 'mobi', 'azw3'],
+  video: ['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv', '3gp', 'mpg', 'ogv'],
+  document: ['docx', 'pdf', 'txt', 'rtf', 'odt'],
+  archive: ['zip', '7z']
 };
 
 const supportedImageToPdfFormats = ['jpg', 'jpeg', 'png'];
@@ -277,20 +263,34 @@ async function compressPDF(inputPath, outputPath, quality = 80) {
       throw new Error(`Invalid or corrupted PDF file: ${inputPath}`);
     }
 
-    let pdfSetting;
-    if (quality >= 80) {
-      pdfSetting = 'prepress';
-    } else if (quality >= 60) {
-      pdfSetting = 'printer';
-    } else {
-      pdfSetting = 'screen';
+    // Try Ghostscript first for best compression
+    try {
+      let pdfSetting;
+      if (quality >= 80) {
+        pdfSetting = 'prepress';
+      } else if (quality >= 60) {
+        pdfSetting = 'printer';
+      } else {
+        pdfSetting = 'screen';
+      }
+      const gsCommand = `gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/${pdfSetting} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outputPath}" "${inputPath}"`;
+      await execPromise(gsCommand);
+      await fsPromises.access(outputPath);
+      console.log(`PDF compression completed with Ghostscript: ${outputPath}`);
+      return;
+    } catch (gsErr) {
+      console.warn(`Ghostscript not available, using pdf-lib fallback: ${gsErr.message}`);
     }
 
-    const gsCommand = `gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/${pdfSetting} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outputPath}" "${inputPath}"`;
-    await execPromise(gsCommand);
-    
-    await fsPromises.access(outputPath);
-    console.log(`PDF compression completed with Ghostscript: ${outputPath}`);
+    // Fallback: Use pdf-lib to copy pages (basic compression via re-serialization)
+    const inputData = await fsPromises.readFile(inputPath);
+    const srcDoc = await PDFDocument.load(inputData);
+    const pdfDoc = await PDFDocument.create();
+    const pages = await pdfDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+    pages.forEach((page) => pdfDoc.addPage(page));
+    const compressedBytes = await pdfDoc.save();
+    await fsPromises.writeFile(outputPath, compressedBytes);
+    console.log(`PDF compression completed with pdf-lib: ${outputPath}`);
   } catch (err) {
     console.error(`PDF compression failed: ${err.message}`);
     throw new Error(`Failed to compress PDF: ${err.message}`);
@@ -328,8 +328,11 @@ async function convertImageToPDF(inputPath, outputPath) {
 
 async function convertPngToGif(inputPath, outputPath) {
   try {
-    await execPromise(`convert "${inputPath}" "${outputPath}"`);
-    console.log(`Converted PNG to GIF: ${outputPath}`);
+    // Use sharp for PNG to GIF conversion (no ImageMagick needed)
+    await sharp(inputPath)
+      .gif()
+      .toFile(outputPath);
+    console.log(`Converted PNG to GIF with sharp: ${outputPath}`);
   } catch (err) {
     console.error(`PNG to GIF conversion failed: ${err.message}`);
     throw new Error(`Failed to convert PNG to GIF: ${err.message}`);
@@ -355,6 +358,171 @@ async function convertImage(inputPath, outputPath, format) {
   }
 }
 
+async function convertPdfToDocx(inputPath, outputPath) {
+  try {
+    console.log(`Converting PDF to DOCX using pdf-parse: ${inputPath}`);
+    const dataBuffer = await fsPromises.readFile(inputPath);
+    let extractedText = '';
+    try {
+      const data = await pdfParse(dataBuffer);
+      extractedText = data.text || '';
+    } catch (parseErr) {
+      console.warn(`pdf-parse failed: ${parseErr.message}`);
+    }
+
+    if (!extractedText.trim()) {
+      throw new Error('No text content found in the PDF. This PDF may contain only images/scanned content.');
+    }
+
+    // Split text into paragraphs and create a proper DOCX document
+    const paragraphs = extractedText.split(/\n+/).filter(line => line.trim()).map(line =>
+      new Paragraph({
+        children: [new TextRun({ text: line.trim(), size: 24 })],
+        spacing: { after: 120 },
+      })
+    );
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: paragraphs.length > 0 ? paragraphs : [new Paragraph({ children: [new TextRun('(No text content found)')] })],
+      }],
+    });
+    const buffer = await Packer.toBuffer(doc);
+    await fsPromises.writeFile(outputPath, buffer);
+    console.log(`PDF to DOCX conversion completed: ${outputPath}`);
+  } catch (err) {
+    console.error(`PDF to DOCX conversion failed: ${err.message}`);
+    throw new Error(`Failed to convert PDF to DOCX: ${err.message}`);
+  }
+}
+
+async function convertPdfToTextBasedDocument(inputPath, outputPath, format) {
+  try {
+    console.log(`Converting PDF to ${format.toUpperCase()} using pdf-parse: ${inputPath}`);
+    const dataBuffer = await fsPromises.readFile(inputPath);
+    let extractedText = '';
+    try {
+      const data = await pdfParse(dataBuffer);
+      extractedText = data.text || '';
+    } catch (parseErr) {
+      console.warn(`pdf-parse failed: ${parseErr.message}`);
+    }
+
+    if (!extractedText.trim()) {
+      throw new Error('No text content found in the PDF. This PDF may contain only images/scanned content.');
+    }
+
+    if (format === 'txt') {
+      await fsPromises.writeFile(outputPath, extractedText);
+    } else if (format === 'rtf') {
+      const rtfContent = `{\\rtf1\\ansi\\ansicpg1252\\deff0\\nouicompat{\\fonttbl{\\f0\\fnil\\fcharset0 Calibri;}}\n{\\*\\generator custom;}\n\\f0\\fs22 ${extractedText.replace(/\\/g, '\\\\').replace(/\\{/g, '\\\\{').replace(/\\}/g, '\\\\}').replace(/\n/g, '\\par\n')}\n}`;
+      await fsPromises.writeFile(outputPath, rtfContent);
+    } else if (format === 'odt') {
+      await new Promise((resolve, reject) => {
+        const output = fs.createWriteStream(outputPath);
+        const archive = archiver('zip', { zlib: { level: 9 } });
+
+        output.on('close', resolve);
+        archive.on('error', reject);
+
+        archive.pipe(output);
+        archive.append('application/vnd.oasis.opendocument.text', { name: 'mimetype', store: true });
+        
+        const contentXml = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      ${extractedText.split('\n').map(line => `<text:p>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text:p>`).join('')}
+    </office:text>
+  </office:body>
+</office:document-content>`;
+        
+        archive.append(contentXml, { name: 'content.xml' });
+        
+        const manifestXml = `<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0">
+  <manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>
+  <manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
+</manifest:manifest>`;
+
+        archive.append(manifestXml, { name: 'META-INF/manifest.xml' });
+        archive.finalize();
+      });
+    }
+
+    console.log(`PDF to ${format.toUpperCase()} conversion completed: ${outputPath}`);
+  } catch (err) {
+    console.error(`PDF to ${format.toUpperCase()} conversion failed: ${err.message}`);
+    throw new Error(`Failed to convert PDF to ${format.toUpperCase()}: ${err.message}`);
+  }
+}
+
+async function convertPdfToImage(inputPath, outputPath, format) {
+  const { isValid } = await validatePDF(inputPath);
+  if (!isValid) {
+    throw new Error(`Invalid or corrupted PDF file: ${inputPath}`);
+  }
+
+  // Try poppler (pdftoppm) first
+  try {
+    const outputBaseName = path.basename(outputPath, `.${format}`);
+    const tempOutputPath = path.join(convertedDir, outputBaseName);
+    if (format === 'gif') {
+      // PDF -> PNG -> GIF
+      const tempPngPath = path.join(convertedDir, `${outputBaseName}.png`);
+      await execPromise(`pdftoppm -png -singlefile "${inputPath}" "${tempOutputPath}"`);
+      if (await fsPromises.access(tempPngPath).then(() => true).catch(() => false)) {
+        await convertPngToGif(tempPngPath, outputPath);
+        await fsPromises.unlink(tempPngPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
+      } else {
+        throw new Error('pdftoppm output not found');
+      }
+    } else {
+      const formatOption = format === 'jpg' ? '-jpeg' : `-${format}`;
+      await execPromise(`pdftoppm ${formatOption} -singlefile "${inputPath}" "${tempOutputPath}"`);
+      const generatedPath = path.join(convertedDir, `${outputBaseName}.${format}`);
+      if (await fsPromises.access(generatedPath).then(() => true).catch(() => false)) {
+        await fsPromises.rename(generatedPath, outputPath);
+      } else {
+        throw new Error('pdftoppm output not found');
+      }
+    }
+    console.log(`PDF to ${format} conversion completed with poppler: ${outputPath}`);
+    return;
+  } catch (popplerErr) {
+    console.warn(`Poppler not available, trying pdf2pic+sharp fallback: ${popplerErr.message}`);
+  }
+
+  // Fallback: Use pdf2pic (which uses sharp internally)
+  try {
+    const options = {
+      density: 150,
+      saveFilename: `temp_${Date.now()}`,
+      savePath: convertedDir,
+      format: format === 'gif' ? 'png' : format,
+      width: 1200,
+      height: 1600,
+    };
+    const converter = fromPath(inputPath, options);
+    const result = await converter(1); // Convert first page
+    if (result && result.path) {
+      if (format === 'gif') {
+        await convertPngToGif(result.path, outputPath);
+        await fsPromises.unlink(result.path).catch(() => {});
+      } else {
+        await fsPromises.rename(result.path, outputPath);
+      }
+      console.log(`PDF to ${format} conversion completed with pdf2pic: ${outputPath}`);
+    } else {
+      throw new Error('pdf2pic returned no result');
+    }
+  } catch (pdf2picErr) {
+    console.error(`pdf2pic fallback also failed: ${pdf2picErr.message}`);
+    throw new Error(`PDF to image conversion failed. Please install poppler-utils for reliable PDF to image conversion. Error: ${pdf2picErr.message}`);
+  }
+}
+
 async function convertPdf(inputPath, outputPath, format, originalName) {
   const inputExt = path.extname(originalName).toLowerCase().slice(1);
   console.log(`Extracted input extension from originalName ${originalName}: ${inputExt}`);
@@ -362,71 +530,19 @@ async function convertPdf(inputPath, outputPath, format, originalName) {
     throw new Error(`PDF conversion only supports PDF input files. Got ${inputExt}.`);
   }
   if (['jpg', 'png', 'gif'].includes(format)) {
-    try {
-      const { isValid } = await validatePDF(inputPath);
-      if (!isValid) {
-        throw new Error(`Invalid or corrupted PDF file: ${inputPath}`);
-      }
-      const outputBaseName = path.basename(inputPath, '.pdf');
-      const tempOutputPath = path.join(convertedDir, `${outputBaseName}`);
-      let formatOption = format === 'jpg' ? '-jpeg' : `-${format}`;
-      if (format === 'gif') {
-        formatOption = '-png';
-        const tempPngPath = path.join(convertedDir, `${outputBaseName}.png`);
-        await execPromise(`pdftoppm -png -singlefile "${inputPath}" "${tempOutputPath}"`);
-        if (await fsPromises.access(tempPngPath).then(() => true).catch(() => false)) {
-          await convertPngToGif(tempPngPath, outputPath);
-          await fsPromises.unlink(tempPngPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
-        } else {
-          throw new Error(`PDF to PNG intermediate output not found: ${tempPngPath}`);
-        }
-      } else {
-        await execPromise(`pdftoppm ${formatOption} -singlefile "${inputPath}" "${tempOutputPath}"`);
-        const generatedPath = path.join(convertedDir, `${outputBaseName}.${format}`);
-        if (await fsPromises.access(generatedPath).then(() => true).catch(() => false)) {
-          await fsPromises.rename(generatedPath, outputPath);
-        } else {
-          throw new Error(`PDF to image output not found: ${generatedPath}`);
-        }
-      }
-    } catch (pdfError) {
-      throw new Error(`PDF to image conversion failed for ${inputPath} to ${format}: ${pdfError.message}`);
-    }
+    await convertPdfToImage(inputPath, outputPath, format);
   } else if (format === 'docx') {
-    try {
-        console.log(`Using OCR for PDF to DOCX conversion: ${outputPath}`);
-        // Convert PDF to image for OCR
-        const tempPngPath = path.join(convertedDir, `temp_${Date.now()}.png`);
-        await fromPath(inputPath, {
-          density: 100,
-          format: 'png',
-          width: 595,
-          height: 842,
-        }).bulk(-1, { outputDir: convertedDir, outputName: path.basename(tempPngPath, '.png') });
-        const { data: { text } } = await Tesseract.recognize(tempPngPath, 'eng');
-        await fsPromises.unlink(tempPngPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
-        if (!text.trim()) {
-          throw new Error('OCR extracted no text from PDF');
-        }
-        // Create DOCX with extracted text
-        const doc = new Document({
-          sections: [{ children: [new Paragraph(text)] }],
-        });
-        const buffer = await Packer.toBuffer(doc);
-        await fsPromises.writeFile(outputPath, buffer);
-        console.log(`PDF to DOCX conversion completed with OCR: ${outputPath}`);
-    } catch (err) {
-      console.error(`PDF to DOCX conversion failed: ${err.message}`);
-      throw new Error(`Failed to convert PDF to DOCX: ${err.message}`);
-    }
+    await convertPdfToDocx(inputPath, outputPath);
+  } else if (['txt', 'rtf', 'odt'].includes(format)) {
+    await convertPdfToTextBasedDocument(inputPath, outputPath, format);
   } else {
     throw new Error(`Unsupported PDF output format: ${format}`);
   }
 }
 
-async function convertDocument(inputPath, outputPath, format) {
-  const inputExt = path.extname(inputPath).toLowerCase().slice(1);
-  const supportedDocumentFormats = ['docx', 'pdf'];
+async function convertDocument(inputPath, outputPath, format, originalName) {
+  const inputExt = path.extname(originalName).toLowerCase().slice(1);
+  const supportedDocumentFormats = ['docx', 'pdf', 'txt', 'rtf', 'odt'];
   if (['bmp', 'eps', 'gif', 'ico', 'png', 'svg', 'tga', 'tiff', 'wbmp', 'webp', 'jpg', 'jpeg'].includes(inputExt)) {
     if (format !== 'pdf') {
       throw new Error(`Image to ${format} conversion is not supported in document type. Use image type for PDF output.`);
@@ -442,32 +558,9 @@ async function convertDocument(inputPath, outputPath, format) {
     throw new Error(`Document conversion only supports PDF input files. Got ${inputExt}.`);
   }
   if (format === 'docx') {
-    try {
-        console.log(`Using OCR for Document to DOCX conversion: ${outputPath}`);
-        // Convert PDF to image for OCR
-        const tempPngPath = path.join(convertedDir, `temp_${Date.now()}.png`);
-        await fromPath(inputPath, {
-          density: 100,
-          format: 'png',
-          width: 595,
-          height: 842,
-        }).bulk(-1, { outputDir: convertedDir, outputName: path.basename(tempPngPath, '.png') });
-        const { data: { text } } = await Tesseract.recognize(tempPngPath, 'eng');
-        await fsPromises.unlink(tempPngPath).catch(err => console.error(`Error cleaning up temp PNG: ${err.message}`));
-        if (!text.trim()) {
-          throw new Error('OCR extracted no text from PDF');
-        }
-        // Create DOCX with extracted text
-        const doc = new Document({
-          sections: [{ children: [new Paragraph(text)] }],
-        });
-        const buffer = await Packer.toBuffer(doc);
-        await fsPromises.writeFile(outputPath, buffer);
-        console.log(`Document conversion to DOCX completed with OCR: ${outputPath}`);
-    } catch (err) {
-      console.error(`Document conversion failed: ${err.message}`);
-      throw new Error(`Failed to convert PDF to DOCX: ${err.message}`);
-    }
+    await convertPdfToDocx(inputPath, outputPath);
+  } else if (['txt', 'rtf', 'odt'].includes(format)) {
+    await convertPdfToTextBasedDocument(inputPath, outputPath, format);
   } else {
     await fsPromises.copyFile(inputPath, outputPath);
     console.log(`Document copied (no conversion needed): ${outputPath}`);
@@ -491,9 +584,27 @@ async function convertMedia(inputPath, outputPath, format) {
 }
 
 async function convertArchive(inputPath, outputPath, format) {
-  if (format === 'zip' || format === '7z') {
+  if (format === 'zip') {
+    // Use archiver for ZIP (no external tools needed)
     return new Promise((resolve, reject) => {
-      sevenZip.add(outputPath, inputPath, { $raw: { '-t': format } })
+      const output = fs.createWriteStream(outputPath);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      output.on('close', () => {
+        console.log(`Archive conversion completed (${archive.pointer()} bytes): ${outputPath}`);
+        resolve();
+      });
+      archive.on('error', (err) => {
+        console.error(`Archive conversion error: ${err.message}`);
+        reject(new Error(`Archive conversion failed: ${err.message}`));
+      });
+      archive.pipe(output);
+      archive.file(inputPath, { name: path.basename(inputPath) });
+      archive.finalize();
+    });
+  } else if (format === '7z') {
+    // Use node-7z with 7zip-bin (no system 7-zip required)
+    return new Promise((resolve, reject) => {
+      sevenZip.add(outputPath, inputPath, { $bin: sevenBin.path7za, $raw: ['-t' + format] })
         .on('end', () => {
           console.log(`Archive conversion completed: ${outputPath}`);
           resolve();
@@ -509,16 +620,7 @@ async function convertArchive(inputPath, outputPath, format) {
 }
 
 async function convertEbook(inputPath, outputPath, format) {
-  return new Promise((resolve, reject) => {
-    exec(`ebook-convert "${inputPath}" "${outputPath}"`, (err) => {
-      if (err) {
-        console.error(`Ebook conversion error: ${err.message}`);
-        return reject(new Error(`Ebook conversion failed: ${err.message}`));
-      }
-      console.log(`Ebook conversion completed: ${outputPath}`);
-      resolve();
-    });
-  });
+  throw new Error("Ebook conversions are disabled as they require desktop Calibre, which is incompatible with this deployment environment.");
 }
 
 async function convertCompressor(inputPath, outputPath, format, quality = 80) {
@@ -666,7 +768,7 @@ app.post('/api/convert', upload.array('files', 5), async (req, res) => {
             await convertMedia(inputPath, outputPath, outputExt);
             break;
           case 'document':
-            await convertDocument(inputPath, outputPath, outputExt);
+            await convertDocument(inputPath, outputPath, outputExt, file.originalname);
             break;
           case 'archive':
             await convertArchive(inputPath, outputPath, outputExt);
