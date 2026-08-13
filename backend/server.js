@@ -16,7 +16,6 @@ const { fromPath } = require('pdf2pic');
 const sevenZip = require('node-7z');
 const compressImages = require("compress-images");
 const { PDFDocument } = require('pdf-lib');
-const { Converter } = require('pdf2docx'); // Added for PDF-to-DOCX
 const Tesseract = require('tesseract.js'); // Added for OCR
 const { Document, Packer, Paragraph } = require('docx'); // Added for fallback DOCX creation
 
@@ -73,7 +72,6 @@ async function checkDependencies() {
     { name: 'pdf2pic', module: 'pdf2pic' },
     { name: 'node-7z', module: 'node-7z' },
     { name: 'pdf-lib', module: 'pdf-lib' },
-    { name: 'pdf2docx', module: 'pdf2docx' }, // Added
     { name: 'tesseract.js', module: 'tesseract.js' }, // Added
     { name: 'docx', module: 'docx' }, // Added
   ];
@@ -126,9 +124,6 @@ async function checkDependencies() {
   }
   if (!dependencies['pdf-lib']) {
     console.warn('Warning: pdf-lib module is not installed. Some PDF operations may be limited.');
-  }
-  if (!dependencies['pdf2docx']) {
-    console.error('Critical: pdf2docx module is not installed. PDF to DOCX conversions will fail.');
   }
   if (!dependencies['tesseract.js']) {
     console.warn('Warning: tesseract.js module is not installed. Image-based PDF to DOCX conversions may be limited.');
@@ -399,13 +394,7 @@ async function convertPdf(inputPath, outputPath, format, originalName) {
     }
   } else if (format === 'docx') {
     try {
-      // First attempt with pdf2docx
-      const converter = new Converter(inputPath, outputPath);
-      await converter.convert();
-      // Verify output file
-      const stats = await fsPromises.stat(outputPath);
-      if (stats.size < 1000) { // Arbitrary threshold for "empty" DOCX
-        console.warn(`DOCX file ${outputPath} appears empty (size: ${stats.size} bytes). Attempting OCR fallback.`);
+        console.log(`Using OCR for PDF to DOCX conversion: ${outputPath}`);
         // Convert PDF to image for OCR
         const tempPngPath = path.join(convertedDir, `temp_${Date.now()}.png`);
         await fromPath(inputPath, {
@@ -425,10 +414,7 @@ async function convertPdf(inputPath, outputPath, format, originalName) {
         });
         const buffer = await Packer.toBuffer(doc);
         await fsPromises.writeFile(outputPath, buffer);
-        console.log(`PDF to DOCX conversion completed with OCR fallback: ${outputPath}`);
-      } else {
-        console.log(`PDF to DOCX conversion completed using pdf2docx: ${outputPath}`);
-      }
+        console.log(`PDF to DOCX conversion completed with OCR: ${outputPath}`);
     } catch (err) {
       console.error(`PDF to DOCX conversion failed: ${err.message}`);
       throw new Error(`Failed to convert PDF to DOCX: ${err.message}`);
@@ -457,13 +443,7 @@ async function convertDocument(inputPath, outputPath, format) {
   }
   if (format === 'docx') {
     try {
-      // First attempt with pdf2docx
-      const converter = new Converter(inputPath, outputPath);
-      await converter.convert();
-      // Verify output file
-      const stats = await fsPromises.stat(outputPath);
-      if (stats.size < 1000) { // Arbitrary threshold for "empty" DOCX
-        console.warn(`DOCX file ${outputPath} appears empty (size: ${stats.size} bytes). Attempting OCR fallback.`);
+        console.log(`Using OCR for Document to DOCX conversion: ${outputPath}`);
         // Convert PDF to image for OCR
         const tempPngPath = path.join(convertedDir, `temp_${Date.now()}.png`);
         await fromPath(inputPath, {
@@ -483,10 +463,7 @@ async function convertDocument(inputPath, outputPath, format) {
         });
         const buffer = await Packer.toBuffer(doc);
         await fsPromises.writeFile(outputPath, buffer);
-        console.log(`Document conversion to DOCX completed with OCR fallback: ${outputPath}`);
-      } else {
-        console.log(`Document conversion to DOCX completed using pdf2docx: ${outputPath}`);
-      }
+        console.log(`Document conversion to DOCX completed with OCR: ${outputPath}`);
     } catch (err) {
       console.error(`Document conversion failed: ${err.message}`);
       throw new Error(`Failed to convert PDF to DOCX: ${err.message}`);
