@@ -7,12 +7,14 @@ import Heading from "../components/Heading";
 
 const Homepage = () => {
   return (
-    <div className="min-h-screen bg-white text-black">
+    <div className="min-h-screen bg-white text-black flex flex-col">
       <Navbar />
-      <Heading selectedConverter={null} />
-      <Dropbox />
-      <Features />
-      <FileConverter />
+      <main className="flex-grow">
+        <Heading selectedConverter={null} />
+        <Dropbox />
+        <Features />
+        <FileConverter />
+      </main>
       <Footer />
     </div>
   );

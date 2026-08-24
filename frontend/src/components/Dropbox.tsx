@@ -59,7 +59,7 @@ export default function Dropbox() {
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
   const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || "";
   const DROPBOX_APP_KEY = import.meta.env.VITE_DROPBOX_APP_KEY || "";
-  const API_URL = import.meta.env.VITE_API_URL || "https://fileconverter-backend.onrender.com";
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerLoaded = useRef(false);
@@ -360,10 +360,7 @@ export default function Dropbox() {
     );
   };
 
-  const removeFile = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-    setErrorMessage(null);
-  };
+
 
   const selectSubSection = (index: number, subSection: string) => {
     setCompressError({});
@@ -556,7 +553,7 @@ export default function Dropbox() {
     <div>
       <div className="flex items-center justify-center">
         <div className="flex flex-col items-center justify-center space-y-2 converter-wrapper pt-10 m-4 rounded-md bg-white shadow-lg w-full max-w-3xl">
-          <div className="bg-red-500 text-white gap-4 rounded-md px-8 py-6 flex items-center space-x-6 shadow-md w-[50%] justify-center">
+          <div className="bg-red-700 text-white gap-4 rounded-md px-8 py-6 flex items-center space-x-6 shadow-md w-[50%] justify-center">
             <span className="font-semibold text-[15px]">Choose Files</span>
             <FaFolderOpen
               onClick={handleLocalFileClick}
@@ -591,7 +588,7 @@ export default function Dropbox() {
           <div className="mt-6 w-full max-w-2xl space-y-3">
             {selectedFiles.map((item, index) => {
               const convertedFile = convertedFiles.find((file) => file.originalId === item.id);
-              const ext = item.file.name.split(".").pop()?.toLowerCase() ?? "";
+
               console.log(
                 `Checking match for ${item.file.name} (ID: ${item.id}):`,
                 convertedFile ? convertedFile.name : "No match"

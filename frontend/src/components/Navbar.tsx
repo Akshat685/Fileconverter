@@ -67,6 +67,7 @@ const Navbar = () => {
             className="w-24 sm:w-28 h-6 sm:h-7 object-contain"
           />
           <button
+            aria-label="Toggle mobile menu"
             className="sm:hidden text-gray-600 hover:text-red-600 focus:outline-none"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
@@ -109,6 +110,7 @@ const Navbar = () => {
           />
           {searchTerm && (
             <button
+              aria-label="Clear search"
               onClick={() => {
                 setSearchTerm("");
                 setFiltered([]);
